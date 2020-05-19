@@ -1,6 +1,8 @@
+#install.packages('tidyverse')
 library(tidyverse)
-install.packages('caret')
+#install.packages('caret')
 library(caret)
+#install.packages('dslabs')
 library(dslabs)
 data(heights)
 
@@ -97,3 +99,33 @@ x = test %>% pull(names(iris)[3])
 y_test = ifelse(test$Species=='virginica', 1, 0)
 y_hat = ifelse(x>4.7, 1,0)
 mean(y_test==y_hat)
+
+x_p_length = test %>% pull(names(iris)[3])
+x_p_width = test %>% pull(names(iris)[4])
+y_test = ifelse(test$Species=='virginica', 1, 0)
+y_hat = ifelse(x_p_length>4.7 | x_p_width > 1.5, 1,0)
+mean(y_test==y_hat)
+
+# Labs
+# P(d | t+)= p(t+ | d) * p(d) /p(t+)
+# 0.85 * 0.02 / p(t+)
+# p(t-|healthy) = 
+
+
+# Labs
+set.seed(1, sample.kind="Rounding")
+disease <- sample(c(0,1), size=1e6, replace=TRUE, prob=c(0.98,0.02))
+test <- rep(NA, 1e6)
+test[disease==0] <- sample(c(0,1), size=sum(disease==0), replace=TRUE, prob=c(0.90,0.10))
+test[disease==1] <- sample(c(0,1), size=sum(disease==1), replace=TRUE, prob=c(0.15, 0.85))
+mean(test)
+sum(test==0 & disease==1)/sum(test==0)
+(sum(test==1 & disease==1)/sum(test==1))/(sum(disease==1)/length(disease))
+
+# Labs
+
+
+
+
+
+
