@@ -1,3 +1,13 @@
+# KEY UNDERSTANDINGS
+
+
+
+
+
+
+
+
+
 #install.packages('tidyverse')
 library(tidyverse)
 #install.packages('caret')
@@ -454,6 +464,159 @@ mnist_27$true_p %>%
   ggplot() +
   stat_contour(aes(x_1, x_2, z=p_hat), breaks=c(0.5), color="black") +
   geom_point(mapping = aes(x_1, x_2, color=y), data = mnist_27$test)
+
+
+# Labs
+set.seed(2, sample.kind="Rounding") #if you are using R 3.6 or later
+make_data <- function(n = 1000, p = 0.5, 
+                      mu_0 = 0, mu_1 = 2, 
+                      sigma_0 = 1,  sigma_1 = 1){
+  
+  y <- rbinom(n, 1, p)
+  f_0 <- rnorm(n, mu_0, sigma_0)
+  f_1 <- rnorm(n, mu_1, sigma_1)
+  x <- ifelse(y == 1, f_1, f_0)
+  
+  test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+  
+  list(train = data.frame(x = x, y = as.factor(y)) %>% slice(-test_index),
+       test = data.frame(x = x, y = as.factor(y)) %>% slice(test_index))
+}
+dat <- make_data()
+
+dat$train %>% ggplot(aes(x, color = y)) + geom_density()
+
+mu_1 = 3
+
+mu_1 <- seq(0, 3, len=25)
+logistic_run <- function(mu_1){
+  n = 1000
+  p = 0.5
+  mu_0 = 0
+  sigma_0 = 1
+  sigma_1 = 1
+  y <- rbinom(n, 1, p)
+  f_0 <- rnorm(n, mu_0, sigma_0)
+  f_1 <- rnorm(n, mu_1, sigma_1)
+  x <- ifelse(y == 1, f_1, f_0)
+  
+  test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+  train = data.frame(x = x, y = as.factor(y)) %>% slice(-test_index)
+  test = data.frame(x = x, y = as.factor(y)) %>% slice(test_index)
+  fit = glm(y~x, data = train, family = "binomial")
+  p = predict(fit, test, type='response')
+  y_hat = ifelse(p>0.5,1,0)
+  acc = mean(y==y_hat)
+  return(acc)
+}
+
+set.seed(1, sample.kind="Rounding") 
+res = sapply(mu_1, logistic_run)
+plot(y=res, x=mu_1) # THE GRAPH IS NOT COMING CORRECT, IT SHOULD HAVE AN INCREASING TREND
+
+
+# SMOOTHING or CURVE FITTING or LOW PASS FILTERING
+library(tidyverse)
+library(dslabs)
+data("polls_2008")
+qplot(day, margin, data = polls_2008)
+
+span <- 7 
+fit <- with(polls_2008, ksmooth(day, margin, kernel = "box", bandwidth = span))
+class(fit)
+names(fit)
+polls_2008 %>% mutate(smooth = fit$y) %>%
+  ggplot(aes(day, margin)) +
+  geom_point(size = 3, alpha = .5, color = "grey") + 
+  geom_line(aes(day, smooth), color="red")
+
+
+fit <- with(polls_2008, ksmooth(day, margin, kernel = "normal", bandwidth = span))
+polls_2008 %>% mutate(smooth = fit$y) %>%
+  ggplot(aes(day, margin)) +
+  geom_point(size = 3, alpha = .5, color = "grey") + 
+  geom_line(aes(day, smooth), color="red")
+
+
+total_days <- diff(range(polls_2008$day))
+span <- 21/total_days
+
+fit <- loess(margin ~ day, degree=1, span = span, data=polls_2008)
+names(fit)
+polls_2008 %>% mutate(smooth = fit$fitted) %>%
+  ggplot(aes(day, margin)) +
+  geom_point(size = 3, alpha = .5, color = "grey") +
+  geom_line(aes(day, smooth), color="red")
+
+
+total_days <- diff(range(polls_2008$day))
+span <- 28/total_days
+fit_1 <- loess(margin ~ day, degree=1, span = span, data=polls_2008)
+fit_2 <- loess(margin ~ day, span = span, data=polls_2008)
+polls_2008 %>% mutate(smooth_1 = fit_1$fitted, smooth_2 = fit_2$fitted) %>%
+  ggplot(aes(day, margin)) +
+  geom_point(size = 3, alpha = .5, color = "grey") +
+  geom_line(aes(day, smooth_1), color="red", lty = 2) +
+  geom_line(aes(day, smooth_2), color="orange", lty = 1) 
+
+polls_2008 %>% ggplot(aes(day, margin)) +
+  geom_point() + 
+  geom_smooth()
+
+polls_2008 %>% ggplot(aes(day, margin)) +
+  geom_point() + 
+  geom_smooth(span = 0.15, method.args = list(degree=1))
+
+
+# Labs
+library(tidyverse)
+library(lubridate)
+library(purrr)
+install.packages('pdftools')
+library(pdftools)
+
+fn <- system.file("extdata", "RD-Mortality-Report_2015-18-180531.pdf", package="dslabs")
+dat <- map_df(str_split(pdf_text(fn), "\n"), function(s){
+  s <- str_trim(s)
+  header_index <- str_which(s, "2015")[1]
+  tmp <- str_split(s[header_index], "\\s+", simplify = TRUE)
+  month <- tmp[1]
+  header <- tmp[-1]
+  tail_index  <- str_which(s, "Total")
+  n <- str_count(s, "\\d+")
+  out <- c(1:header_index, which(n==1), which(n>=28), tail_index:length(s))
+  s[-out] %>%
+    str_remove_all("[^\\d\\s]") %>%
+    str_trim() %>%
+    str_split_fixed("\\s+", n = 6) %>%
+    .[,1:5] %>%
+    as_data_frame() %>% 
+    setNames(c("day", header)) %>%
+    mutate(month = month,
+           day = as.numeric(day)) %>%
+    gather(year, deaths, -c(day, month)) %>%
+    mutate(deaths = as.numeric(deaths))
+}) %>%
+  mutate(month = recode(month, "JAN" = 1, "FEB" = 2, "MAR" = 3, "APR" = 4, "MAY" = 5, "JUN" = 6, 
+                        "JUL" = 7, "AGO" = 8, "SEP" = 9, "OCT" = 10, "NOV" = 11, "DEC" = 12)) %>%
+  mutate(date = make_date(year, month, day)) %>%
+  filter(date <= "2018-05-01")
+
+head(dat)
+span = 60/nrow(dat)
+dat = dat %>% mutate(d = 1:nrow(dat))
+fit = loess(deaths ~ d, data = dat, span = span, degree = 1)
+dat[-1,]%>% mutate(smooth = fit$fitted) %>% ggplot(aes(date,smooth)) + geom_line(size = 2, color = 'red') + geom_point(aes(x=date, y = deaths), alpha = 0.5)
+fit$fitted
+
+# Labs
+library(broom)
+library(dslabs)
+data(mnist_27)
+mnist_27$train %>% glm(y ~ x_2, family = "binomial", data = .) %>% tidy()
+span = 21/nrow(mnist_27$train)
+fit = loess(as.numeric(y) ~ x_2, data = mnist_27$train, degree = 1, span = span)
+mnist_27$train %>% mutate(smooth = fit$fitted) %>% ggplot(aes(x=x_2, y = smooth))+geom_line()
 
 
 
