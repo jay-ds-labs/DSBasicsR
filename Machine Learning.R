@@ -123,8 +123,337 @@ sum(test==0 & disease==1)/sum(test==0)
 (sum(test==1 & disease==1)/sum(test==1))/(sum(disease==1)/length(disease))
 
 # Labs
+library(dslabs)
+data("heights")
+heights %>% 
+  mutate(height = round(height)) %>%
+  group_by(height) %>%
+  summarize(p = mean(sex == "Male")) %>%qplot(height, p, data =.)
 
 
+ps <- seq(0, 1, 0.1)
+heights %>% 
+  mutate(g = cut(height, quantile(height, ps), include.lowest = TRUE)) %>%
+  group_by(g) %>%
+  summarize(p = mean(sex == "Male"), height = mean(height)) %>%
+  qplot(height, p, data =.)
+
+
+#install.packages('MASS')
+library('MASS')
+Sigma <- 9*matrix(c(1,0.5,0.5,1), 2, 2)
+dat <- MASS::mvrnorm(n = 10000, c(69, 69), Sigma) %>%
+  data.frame() %>% setNames(c("x", "y"))
+
+head(dat)
+
+ps <- seq(0, 1, 0.1)
+dat %>% 
+  mutate(g = cut(x, quantile(x, ps), include.lowest = TRUE)) %>%
+  group_by(g) %>%
+  summarize(y = mean(y), x = mean(x)) %>%
+  qplot(x, y, data =.)
+
+
+# Case study: is it a 2 or a 7?
+library(tidyverse)
+library(dslabs)
+data("mnist_27")
+class(mnist_27)
+names(mnist_27)
+class(mnist_27$train)
+View(mnist_27$train)
+
+mnist_27$train %>% ggplot(aes(x_1, x_2, color = y)) + geom_point()
+fit <- mnist_27$train %>%
+  mutate(y = ifelse(y==7, 1, 0)) %>%
+  lm(y ~ x_1 + x_2, data = .)
+
+library(caret)
+p_hat <- predict(fit, newdata = mnist_27$test)
+y_hat <- factor(ifelse(p_hat > 0.5, 7, 2))
+confusionMatrix(y_hat, mnist_27$test$y)$overall[["Accuracy"]]
+#install.packages('e1071')
+#library(e1071)
+
+View(mnist_27$true_p)
+mnist_27$true_p %>% ggplot(aes(x_1, x_2, z = p, fill = p)) +
+  geom_raster() +
+  scale_fill_gradientn(colors=c("#F8766D", "white", "#00BFC4")) +
+  stat_contour(breaks=c(0.5), color="black")
+
+# Linear Regression
+#install.packages('HistData')
+library(HistData)
+
+set.seed(1983, sample.kind = 'Rounding')
+galton_heights <- GaltonFamilies %>%
+  filter(gender == "male") %>%
+  group_by(family) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  select(father, childHeight) %>%
+  rename(son = childHeight)
+
+head(galton_heights)
+
+y <- galton_heights$son
+test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+
+train_set <- galton_heights %>% slice(-test_index)
+test_set <- galton_heights %>% slice(test_index)
+
+m <- mean(train_set$son)
+m
+mean((m - test_set$son)^2)
+fit <- lm(son ~ father, data = train_set)
+fit$coef
+y_hat <- fit$coef[1] + fit$coef[2]*test_set$father
+mean((y_hat - test_set$son)^2)
+y_hat <- predict(fit, test_set)
+mean((y_hat - test_set$son)^2)
+
+# Labs
+set.seed(1, sample.kind="Rounding")
+n <- 100
+Sigma <- 9*matrix(c(1.0, 0.5, 0.5, 1.0), 2, 2)
+dat <- MASS::mvrnorm(n = 100, c(69, 69), Sigma) %>%
+  data.frame() %>% setNames(c("x", "y"))
+
+y = dat$y
+set.seed(1, sample.kind="Rounding")
+lm_func = function(Y){
+test_index = createDataPartition(Y,times = 1, p=0.5,list = F )
+train_set = dat %>% slice(-test_index)
+test_set = dat %>% slice(test_index)
+fit = lm(y ~ x, data = train_set)
+y_hat = predict(fit, test_set)
+rmse = sqrt(mean((y_hat- test_set$y)^2))
+return(rmse)
+}
+
+result = replicate(100,lm_func(y))
+mean(result)
+sd(result)
+
+
+lm_func = function(D){
+  test_index = createDataPartition(D$y,times = 1, p=0.5,list = F )
+  train_set = D %>% slice(-test_index)
+  test_set = D %>% slice(test_index)
+  fit = lm(y ~ x, data = train_set)
+  y_hat = predict(fit, test_set)
+  rmse = sqrt(mean((y_hat- test_set$y)^2))
+  return(rmse)
+}
+
+func = function(N){
+  dat <- MASS::mvrnorm(n = N, c(69, 69), Sigma) %>%
+    data.frame() %>% setNames(c("x", "y"))
+  result = replicate(100,lm_func(dat))
+  m = round(mean(result),3)
+  s = round(sd(result),3)
+  return(c(m,s))
+}
+
+set.seed(1, sample.kind="Rounding")
+sapply(c(100, 500, 1000, 5000, 10000), func)
+
+
+
+
+set.seed(1, sample.kind="Rounding")
+n <- 100
+Sigma <- 9*matrix(c(1.0, 0.95, 0.95, 1.0), 2, 2)
+dat <- MASS::mvrnorm(n = 100, c(69, 69), Sigma) %>%
+  data.frame() %>% setNames(c("x", "y"))
+
+y = dat$y
+set.seed(1, sample.kind="Rounding")
+lm_func = function(Y){
+  test_index = createDataPartition(Y,times = 1, p=0.5,list = F )
+  train_set = dat %>% slice(-test_index)
+  test_set = dat %>% slice(test_index)
+  fit = lm(y ~ x, data = train_set)
+  y_hat = predict(fit, test_set)
+  rmse = sqrt(mean((y_hat- test_set$y)^2))
+  return(rmse)
+}
+
+result = replicate(100,lm_func(y))
+round(mean(result),3)
+round(sd(result),3)
+
+
+
+set.seed(1, sample.kind="Rounding")
+Sigma <- matrix(c(1.0, 0.75, 0.75, 0.75, 1.0, 0.25, 0.75, 0.25, 1.0), 3, 3)
+dat <- MASS::mvrnorm(n = 100, c(0, 0, 0), Sigma) %>%
+  data.frame() %>% setNames(c("y", "x_1", "x_2"))
+
+set.seed(1, sample.kind="Rounding")
+test_index = createDataPartition(dat$y,times = 1, p=0.5,list = F )
+train_set = dat %>% slice(-test_index)
+test_set = dat %>% slice(test_index)
+
+fit = lm(y ~ x_1, data = train_set)
+y_hat = predict(fit, test_set)
+rmse_x_1 = sqrt(mean((y_hat- test_set$y)^2))
+
+fit = lm(y ~ x_2, data = train_set)
+y_hat = predict(fit, test_set)
+rmse_x_2 = sqrt(mean((y_hat- test_set$y)^2))
+
+fit = lm(y ~ x_1 + x_2, data = train_set)
+y_hat = predict(fit, test_set)
+rmse_x_1_2 = sqrt(mean((y_hat- test_set$y)^2))
+
+rmse_x_1
+rmse_x_2
+rmse_x_1_2
+
+
+
+set.seed(1, sample.kind="Rounding")
+Sigma <- matrix(c(1.0, 0.75, 0.75, 0.75, 1.0, 0.95, 0.75, 0.95, 1.0), 3, 3)
+dat <- MASS::mvrnorm(n = 100, c(0, 0, 0), Sigma) %>%
+  data.frame() %>% setNames(c("y", "x_1", "x_2"))
+
+set.seed(1, sample.kind="Rounding")
+test_index = createDataPartition(dat$y,times = 1, p=0.5,list = F )
+train_set = dat %>% slice(-test_index)
+test_set = dat %>% slice(test_index)
+
+fit = lm(y ~ x_1, data = train_set)
+y_hat = predict(fit, test_set)
+rmse_x_1 = sqrt(mean((y_hat- test_set$y)^2))
+
+fit = lm(y ~ x_2, data = train_set)
+y_hat = predict(fit, test_set)
+rmse_x_2 = sqrt(mean((y_hat- test_set$y)^2))
+
+fit = lm(y ~ x_1 + x_2, data = train_set)
+y_hat = predict(fit, test_set)
+rmse_x_1_2 = sqrt(mean((y_hat- test_set$y)^2))
+
+rmse_x_1
+rmse_x_2
+rmse_x_1_2
+
+
+# Logistic Regression
+library(dslabs)
+data("heights")
+y <- heights$height
+
+set.seed(2, sample.kind = "Rounding") #if you are using R 3.6 or later
+
+test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+train_set <- heights %>% slice(-test_index)
+test_set <- heights %>% slice(test_index)
+
+train_set %>% 
+  filter(round(height)==66) %>%
+  summarize(y_hat = mean(sex=="Female"))
+
+heights %>% 
+  mutate(x = round(height)) %>%
+  group_by(x) %>%
+  filter(n() >= 10) %>%
+  summarize(prop = mean(sex == "Female")) %>%
+  ggplot(aes(x, prop)) +
+  geom_point()
+lm_fit <- mutate(train_set, y = as.numeric(sex == "Female")) %>% lm(y ~ height, data = .)
+p_hat <- predict(lm_fit, test_set)
+y_hat <- ifelse(p_hat > 0.5, "Female", "Male") %>% factor()
+confusionMatrix(y_hat, test_set$sex)$overall["Accuracy"]  # 0.785
+
+heights %>% 
+  mutate(x = round(height)) %>%
+  group_by(x) %>%
+  filter(n() >= 10) %>%
+  summarize(prop = mean(sex == "Female")) %>%
+  ggplot(aes(x, prop)) +
+  geom_point() + 
+  geom_abline(intercept = lm_fit$coef[1], slope = lm_fit$coef[2])
+range(p_hat)
+
+# fit logistic regression model
+glm_fit <- train_set %>% 
+  mutate(y = as.numeric(sex == "Female")) %>%
+  glm(y ~ height, data=., family = "binomial")
+p_hat_logit <- predict(glm_fit, newdata = test_set, type = "response")
+y_hat_logit <- ifelse(p_hat_logit > 0.5, "Female", "Male") %>% factor
+confusionMatrix(y_hat_logit, test_set$sex)$overall[["Accuracy"]] # 0.798
+
+# CASE STUDY - 2 OR 7
+mnist <- read_mnist()
+is <- mnist_27$index_train[c(which.min(mnist_27$train$x_1), which.max(mnist_27$train$x_1))]
+titles <- c("smallest","largest")
+tmp <- lapply(1:2, function(i){
+  expand.grid(Row=1:28, Column=1:28) %>%
+    mutate(label=titles[i],
+           value = mnist$train$images[is[i],])
+})
+tmp <- Reduce(rbind, tmp)
+tmp %>% ggplot(aes(Row, Column, fill=value)) +
+  geom_raster() +
+  scale_y_reverse() +
+  scale_fill_gradient(low="white", high="black") +
+  facet_grid(.~label) +
+  geom_vline(xintercept = 14.5) +
+  geom_hline(yintercept = 14.5)
+
+rm(mnist)
+
+data("mnist_27")
+mnist_27$train %>% ggplot(aes(x_1, x_2, color = y)) + geom_point()
+
+is <- mnist_27$index_train[c(which.min(mnist_27$train$x_2), which.max(mnist_27$train$x_2))]
+titles <- c("smallest","largest")
+tmp <- lapply(1:2, function(i){
+  expand.grid(Row=1:28, Column=1:28) %>%
+    mutate(label=titles[i],
+           value = mnist$train$images[is[i],])
+})
+tmp <- Reduce(rbind, tmp)
+tmp %>% ggplot(aes(Row, Column, fill=value)) +
+  geom_raster() +
+  scale_y_reverse() +
+  scale_fill_gradient(low="white", high="black") +
+  facet_grid(.~label) +
+  geom_vline(xintercept = 14.5) +
+  geom_hline(yintercept = 14.5)
+
+rm(mnist)
+
+fit_glm <- glm(y ~ x_1 + x_2, data=mnist_27$train, family = "binomial")
+p_hat_glm <- predict(fit_glm, mnist_27$test)
+y_hat_glm <- factor(ifelse(p_hat_glm > 0.5, 7, 2))
+confusionMatrix(data = y_hat_glm, reference = mnist_27$test$y)$overall["Accuracy"]
+
+mnist_27$true_p %>% ggplot(aes(x_1, x_2, fill=p)) +
+  geom_raster()
+
+mnist_27$true_p %>% ggplot(aes(x_1, x_2, z=p, fill=p)) +
+  geom_raster() +
+  scale_fill_gradientn(colors=c("#F8766D","white","#00BFC4")) +
+  stat_contour(breaks=c(0.5), color="black") 
+
+p_hat <- predict(fit_glm, newdata = mnist_27$true_p)
+mnist_27$true_p %>%
+  mutate(p_hat = p_hat) %>%
+  ggplot(aes(x_1, x_2,  z=p_hat, fill=p_hat)) +
+  geom_raster() +
+  scale_fill_gradientn(colors=c("#F8766D","white","#00BFC4")) +
+  stat_contour(breaks=c(0.5),color="black") 
+
+p_hat <- predict(fit_glm, newdata = mnist_27$true_p)
+mnist_27$true_p %>%
+  mutate(p_hat = p_hat) %>%
+  ggplot() +
+  stat_contour(aes(x_1, x_2, z=p_hat), breaks=c(0.5), color="black") +
+  geom_point(mapping = aes(x_1, x_2, color=y), data = mnist_27$test)
 
 
 
