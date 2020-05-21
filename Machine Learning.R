@@ -1,4 +1,52 @@
 # KEY UNDERSTANDINGS
+# EVALUATION METRICS
+# accuracy is not the best metric, as we can have high accuracy even with lower
+# sensitivity or specificity. It depends on prevelance. 
+# So if the prevelance of 1 is high (i.e. %age of 1's high) 
+# and you have high sensitivity (% of actual 1's predicted), then even with low specificity (i.e. your ability to predict correctly 0's out of all 0's)
+# you will end up having high accuracy.
+# Hence a better metric is avg of sensitivity & specificity (we have to take harmonic avg as they are rates)
+# or the other metric is F1. It is the harmonic avg of recall (or sensitivity or TPR - true positive rate) & precision (or % of actual 1's out of predicted 1's)
+# in F1 you can even add weight of 
+# F1 = 1/[1/2* (1/recall + 1/precision)] = 2 * precision * recall / (precision + recall)
+# precision is used instead of specificity as it considers prevalance
+# to add weight in F1, we use B - how much more important is sensitivity to specificity
+# F1 = 1/ [ ( B^2/(1 + B^2) * 1/RECALL) + (1/(1+B^2) * 1/PRECISION)]
+
+# Another aspect is you can use confusion matrix OR bayes theorem to find an unknown form the matrix
+
+# ROC curve is between TPR & FPR. I.E. SENSITIVITY & 1-SPECIFICITY
+# The problem of ROC curve is that it doesnt take into account prevelance
+# so if you predict for 0 or you predict for 1, you will get a similar curve
+# Precision vs Recall takes into account prevalance
+# so the curve will show higher precision if you are predicting 1 and 1 has high prevelance
+# while the curve will show lower precision in the above case, if you are predicting 0
+
+# SMOOTHING
+# It is like curve fitting or low pass filter
+# It is used to detect the trend by removing the noise
+# This should be done on the dependant var that we are trying to predict
+# it basically takes into account nearby data points and considers an avg behavior
+# There is a bin smoothing technique which uses ksmooth function and weighted avg techniques
+# Weights basically give more importance to nearby points and less to far away
+# Kernels are used to define weight function. in ksmooth there are 2 kernels - 
+# box & normal. They are called with these names as the shape of the function weights =f(x) when plotted will have these shapes.
+span <- 7
+fit <- with(polls_2008, 
+            ksmooth(day, margin, kernel = "normal", bandwidth = span))
+# The better smoothing function is Loess smoothing technique, as it uses a 
+# linear regression of weights. If we use larger samples it will result in smoother trend
+# In bin smoothing the bin size is same. For e.g. if the size is 7 than even if the actual data points in a particular interval of x:x+6 is only 4 points than only those will be considered for avg
+# In loess the number of points are considered same. So of the span is 21, than for every datapoint, 10 points before and 10 point after and the point itself is considered for a linear regression and then the predicted value at that point is considered the new value. 
+# if we use the argument family = symmetric in loess than it means that the an iterative proces is taken for each estimation, in the first iteration outliers are determined and then in the next iteration their weights are downgraded
+# Loess technique is based on Taylor's theorem which says that if you look at 
+# any function closely enough it looks like a parabola. The default version of 
+# loess technique is with degree = 2. But it doesnt smooth so much
+# So we use degree = 1, which means that a line is fitted resultig in a smoother fit.
+
+# ggplot uses geom_smooth which uses loess technique with default paramters which are generally not a good fit 
+
+# remember that all models try to minimize the loss function which is basically MSE
 
 
 
@@ -233,13 +281,13 @@ dat <- MASS::mvrnorm(n = 100, c(69, 69), Sigma) %>%
 y = dat$y
 set.seed(1, sample.kind="Rounding")
 lm_func = function(Y){
-test_index = createDataPartition(Y,times = 1, p=0.5,list = F )
-train_set = dat %>% slice(-test_index)
-test_set = dat %>% slice(test_index)
-fit = lm(y ~ x, data = train_set)
-y_hat = predict(fit, test_set)
-rmse = sqrt(mean((y_hat- test_set$y)^2))
-return(rmse)
+  test_index = createDataPartition(Y,times = 1, p=0.5,list = F )
+  train_set = dat %>% slice(-test_index)
+  test_set = dat %>% slice(test_index)
+  fit = lm(y ~ x, data = train_set)
+  y_hat = predict(fit, test_set)
+  rmse = sqrt(mean((y_hat- test_set$y)^2))
+  return(rmse)
 }
 
 result = replicate(100,lm_func(y))
@@ -619,5 +667,336 @@ fit = loess(as.numeric(y) ~ x_2, data = mnist_27$train, degree = 1, span = span)
 mnist_27$train %>% mutate(smooth = fit$fitted) %>% ggplot(aes(x=x_2, y = smooth))+geom_line()
 
 
+
+# MATRIX UNDERSTANDING
+library(tidyverse)
+library(dslabs)
+if(!exists("mnist")) mnist <- read_mnist()
+
+names(mnist)
+names(mnist$train)
+class(mnist$train)
+class(mnist$train$images)
+class(mnist$train$labels)
+dim(mnist$train$images)
+
+x <- mnist$train$images[1:1000,] 
+y <- mnist$train$labels[1:1000]
+rm(mnist)
+
+y[3]
+grid <- matrix(x[3,], 28, 28)
+View(grid)
+image(1:28, 1:28, grid)
+image(1:28, 1:28, grid[, 28:1])
+
+avg = rowMeans(x)
+tibble(labels = as.factor(y), row_averages = avg) %>% 
+  qplot(labels, row_averages, data = ., geom = "boxplot") 
+
+install.packages('matrixStats')
+library(matrixStats)
+sds <- colSds(x)
+sds  
+
+qplot(sds, bins = "30", color = I("black"))
+image(1:28, 1:28, matrix(sds, 28, 28)[, 28:1])
+new_x <- x[ ,colSds(x) > 60]
+dim(new_x)
+#> [1] 1000  314
+
+class(x[ , 1, drop=FALSE])
+#> [1] "matrix"
+dim(x[, 1, drop=FALSE])
+#> [1] 1000    1
+
+qplot(as.vector(x), bins = 30, color = I("black"))
+qplot(as.vector(new_x), bins = 30, color = I("black"))
+new_x <- x
+new_x[new_x < 50] <- 0
+
+bin_x <- x
+bin_x[bin_x < 255/2] <- 0 
+bin_x[bin_x > 255/2] <- 1
+
+x_mean_0 <- sweep(x, 2, colMeans(x)) # Sweep is a matrix based function. applies a function on all the rows of a column
+x_standardized <- sweep(x_mean_0, 2, colSds(x), FUN = "/") # it also has a function option that allows to put an expression
+
+# matrix multiplication
+# mat_x %*% mat_y
+# cross product of any matrix 
+# crossproduct(x)
+# inverse of a matrix - 
+# solve(mat_x)
+
+x = as.vector(mnist$train$images)
+sum(x[x>50 & x<205])/length(x)
+
+
+# DISTANCE BASED ALGORITHMS
+# CALCULATING DISTANCE BETWEEN ALL 784 PREDICTORS
+library(tidyverse)
+library(dslabs)
+if(!exists("mnist")) mnist <- read_mnist()
+set.seed(1995, sample.kind = 'Rounding') # if using R 3.6 or later
+ind <- which(mnist$train$labels %in% c(2,7)) %>% sample(500)
+
+#the predictors are in x and the labels in y
+x <- mnist$train$images[ind,]
+y <- mnist$train$labels[ind]
+
+rm(mnist)
+
+y[1:3]
+x_1 <- x[1,]
+x_2 <- x[2,]
+x_3 <- x[3,]
+
+#distance between two numbers
+sqrt(sum((x_1 - x_2)^2))
+sqrt(sum((x_1 - x_3)^2))
+sqrt(sum((x_2 - x_3)^2))
+
+#compute distance using matrix algebra
+sqrt(crossprod(x_1 - x_2))
+sqrt(crossprod(x_1 - x_3))
+sqrt(crossprod(x_2 - x_3))
+
+#compute distance between each row
+d <- dist(x) # DIST FUNCTION CALCULATES DISTANCE ONLY BETWEEN ROWS AND NOT COLUMNS
+class(d)
+as.matrix(d)[1:3,1:3]
+
+#visualize these distances
+image(as.matrix(d))
+
+#order the distance by labels
+image(as.matrix(d)[order(y), order(y)])
+
+#compute distance between predictors
+d <- dist(t(x)) # using transpose to calculate distance between columns and not rows
+dim(as.matrix(d))
+d_492 <- as.matrix(d)[492,]
+image(1:28, 1:28, matrix(d_492, 28, 28))
+
+# Labs
+library(dslabs)
+data(tissue_gene_expression)
+dim(tissue_gene_expression$x)
+table(tissue_gene_expression$y)
+d <- dist(tissue_gene_expression$x)
+as.matrix(d)[c(1,2,39,40,73,74),c(1,2,39,40,73,74)]
+image(as.matrix(d))
+
+# KNN ALGORITHM
+# knn works like bin smoothing
+# it considers the K nearest points and takes the avg values as the estimate
+# Lets say you want to predict Y and you have X1, X2, X3...Xn
+# When we provide the algorithm a new set of values (x1,x2,x3...xn) for which we want to predict Y
+# it finds the K nearest points from x1,x2,x3,....xn and then for those points 
+# calculates the avg of Y (if Y is continous) or Proportion of diff levels of Y (if Y is categorical)
+# larger Ks give more smoother estimates and smaller gives more wiggly estimates
+
+#logistic regression
+library(caret)
+View(mnist_27$train)
+fit_glm <- glm(y~., data=mnist_27$train, family="binomial")
+p_hat_logistic <- predict(fit_glm, mnist_27$test)
+y_hat_logistic <- factor(ifelse(p_hat_logistic > 0.5, 7, 2))
+confusionMatrix(data = y_hat_logistic, reference = mnist_27$test$y)$overall[1]
+
+#fit knn model
+knn_fit <- knn3(y ~ ., data = mnist_27$train) # default value of k is 5
+x <- as.matrix(mnist_27$train[,2:3])
+y <- mnist_27$train$y
+knn_fit <- knn3(x, y)
+knn_fit <- knn3(y ~ ., data = mnist_27$train, k=5)
+y_hat_knn <- predict(knn_fit, mnist_27$test, type = "class")
+confusionMatrix(data = y_hat_knn, reference = mnist_27$test$y)$overall["Accuracy"]
+
+knn_fit <- knn3(y ~ ., data = mnist_27$train) # default value of k is 5
+y_hat_knn <- predict(knn_fit, mnist_27$test, type = "class")
+confusionMatrix(data = y_hat_knn, reference = mnist_27$test$y)$overall["Accuracy"]
+
+
+# Now lets see visually how well this model is able to separate the classes
+View(mnist_27$true_p) # this dataset provides right probability
+mnist_27$true_p %>% ggplot(aes(x_1, x_2, z=p, fill=p)) +
+  geom_raster() +
+  scale_fill_gradientn(colors=c("#F8766D","white","#00BFC4")) +
+  stat_contour(breaks=c(0.5), color="black") # this shows the real way the predicted prob should separate
+# it is basically showing for diff values of x_1 & x_2 what are the predicted prob
+# if the predicted prob is correct then basis the right cut off we will be able to see no overlaps of probabilitis (showns as blue for more than 0.5 and red for less than 0.5)
+p_hat <- predict(knn_fit, newdata = mnist_27$true_p)
+View(p_hat)
+mnist_27$true_p %>%
+  mutate(p_hat = p_hat[,2]) %>%
+  ggplot(aes(x_1, x_2,  z=p_hat, fill=p_hat)) +
+  geom_raster() +
+  scale_fill_gradientn(colors=c("#F8766D","white","#00BFC4")) +
+  stat_contour(breaks=c(0.5),color="black") 
+
+# We can see that the model is failing as there are islands of blue in red regions
+# Lets see how this performs on the training data
+nrow()
+p_hat <- predict(knn_fit, newdata = mnist_27$train)
+mnist_27$train %>%
+  mutate(p_hat = p_hat[,2]) %>%
+  ggplot(aes(x_1, x_2,  z=p_hat, fill=p_hat)) +
+  geom_raster() +
+  scale_fill_gradientn(colors=c("#F8766D","white","#00BFC4")) +
+  stat_contour(breaks=c(0.5),color="black") 
+
+nrow(mnist_27$true_p)
+
+#Tuning the KNN model to find the best K
+knn_fit <- train(y ~ ., method = "knn", 
+                 data = mnist_27$train,
+                 tuneGrid = data.frame(k = seq(9, 71, 2))) # tune grid provides a sequence of odd numbers as K from 9 to 71 
+
+knn_fit$bestTune
+y_hat_knn <- predict(knn_fit, mnist_27$test, type = "raw")
+confusionMatrix(data = y_hat_knn, reference = mnist_27$test$y)$overall["Accuracy"]
+
+
+# UNDERSTANDING CROSS VALIDATION
+# When we build any ML model there are model parameters that we need to decide
+# For e.g. for KNN we need to decide on K
+# If K is 1 than the training is done on each data point individually
+# meaning it will be 100% accurate on training and very low accuracy on test
+# if K is very high than it will be very less accurate on both train & test
+# We need to find a optimal K. Remember that low value of K will lead to over training
+# Wrong approach to find optimal K - Make test & train. Run different models on train for diff K 
+# Check on test MSE and choose the K with lowest K. Problem is - You decided
+# on K using Test dataset. You can not say that this K will hold true in 
+# other population. You have no means to know if this will work and Test 
+# dataset is already used.
+
+# Right approach is - K-Fold Cross validation
+# Here We make train and test. Then take out non overlapiong K samples from training
+# So size of each sample will be N/K where N is total obs in Training set
+# & K is the total number of cross validations you wish to do. Each such sample is called 
+# Validation Set. Every time you take out the Validation Set from Training Set
+# the rest of the data is used to train the model. So lets say you want to find
+# out optimal k for KNN between 5 to 20. So for each value of k try the K-fold validation
+# Meaning build K models and calculate the MSE on validation set each time. 
+# You then calculate avg MSE for that value of k, lest say 5. Then do the same
+# for k = 6, build K models calculate MSE on all K validation sets. Then calculate avg
+# MSE. LIke this do this on all values of k, choose the k which gives min AVG MSE
+# For the chosen k, the parameter estimates are avg of all K model runs on Training data
+# samples. This gives you the final model on training set. Now run this on Test data finally
+# to calculate the MSE expected on population. You can even do K-fold validation on 
+# Test data, by  running the model on K different samples from test data and then take an
+# avg of MSE to provide the expected value of random error.
+
+
+library(tidyverse)
+library(dslabs)
+library(caret)
+data("mnist_27")
+
+knn_fit <- knn3(y ~ ., data = mnist_27$train) # default k = 5
+y_hat_knn <- predict(knn_fit, mnist_27$train, type = "class") 
+confusionMatrix(data = y_hat_knn, reference = mnist_27$train$y)$overall["Accuracy"]
+y_hat_knn <- predict(knn_fit, mnist_27$test, type = "class")  
+confusionMatrix(data = y_hat_knn, reference = mnist_27$test$y)$overall["Accuracy"]
+
+#fit knn with k=1
+knn_fit_1 <- knn3(y ~ ., data = mnist_27$train, k = 1)
+y_hat_knn_1 <- predict(knn_fit_1, mnist_27$train, type = "class")
+confusionMatrix(data=y_hat_knn_1, reference=mnist_27$train$y)$overall[["Accuracy"]]
+y_hat_knn <- predict(knn_fit_1, mnist_27$test, type = "class")  
+confusionMatrix(data = y_hat_knn, reference = mnist_27$test$y)$overall["Accuracy"]
+
+#fit knn with k=401
+knn_fit_401 <- knn3(y ~ ., data = mnist_27$train, k = 401)
+y_hat_knn_401 <- predict(knn_fit_401, mnist_27$train, type = "class")
+confusionMatrix(data=y_hat_knn_401, reference=mnist_27$train$y)$overall[["Accuracy"]]
+y_hat_knn_401 <- predict(knn_fit_401, mnist_27$test, type = "class")
+confusionMatrix(data=y_hat_knn_401, reference=mnist_27$test$y)$overall["Accuracy"]
+
+#pick the k in knn
+ks <- seq(3, 251, 2)
+library(purrr)
+accuracy <- map_df(ks, function(k){
+  fit <- knn3(y ~ ., data = mnist_27$train, k = k)
+  y_hat <- predict(fit, mnist_27$train, type = "class")
+  cm_train <- confusionMatrix(data = y_hat, reference = mnist_27$train$y)
+  train_error <- cm_train$overall["Accuracy"]
+  y_hat <- predict(fit, mnist_27$test, type = "class")
+  cm_test <- confusionMatrix(data = y_hat, reference = mnist_27$test$y)
+  test_error <- cm_test$overall["Accuracy"]
+  
+  tibble(train = train_error, test = test_error)
+})
+
+#pick the k that maximizes accuracy using the estimates built on the test data
+ks[which.max(accuracy$test)]
+max(accuracy$test)
+
+
+# Labs
+library(caret)
+library(dslabs)
+set.seed(1, sample.kind = 'Rounding')
+data(heights)
+View(heights)
+y <- heights$height
+set.seed(1, sample.kind = "Rounding")
+test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+train_set <- heights %>% slice(-test_index)
+test_set <- heights %>% slice(test_index)
+
+ks <- seq(1, 101, 3)
+library(purrr)
+accuracy <- map_df(ks, function(k){
+  fit <- knn3(sex ~ height, data = train_set, k = k)
+  y_hat <- predict(fit, test_set, type = "class")
+  cm_test <- confusionMatrix(data = y_hat, reference = test_set$sex, mode='everything')
+  f1 <- cm_test$byClass["F1"]
+  tibble(test = f1)
+})
+max(accuracy$test)
+ks[which.max(accuracy$test)]
+max(accuracy$test)
+
+
+ks <- seq(1, 101, 3)
+library(purrr)
+accuracy <- map_df(ks, function(k){
+  fit <- knn3(sex ~ height, data = train_set, k = k)
+  y_hat <- predict(fit, test_set, type = "class")
+  cm_test <- confusionMatrix(data = y_hat, reference = test_set$sex, mode='everything')
+  f1 <- cm_test$byClass["F1"]
+  tibble(test = f1)
+})
+max(accuracy$test)
+ks[which.max(accuracy$test)]
+max(accuracy$test)
+
+library(dslabs)
+data(tissue_gene_expression)
+x = tissue_gene_expression$x
+y = tissue_gene_expression$y
+ks = c(1, 3, 5, 7, 9, 11)
+
+set.seed(1, sample.kind = "Rounding")
+test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+train_x <- x[-test_index,]
+train_y <- y[-test_index]
+test_x <- x[test_index,]
+test_y <- y[test_index]
+
+library(purrr)
+accuracy <- map_df(ks, function(k){
+  fit <- knn3(y=train_y, x=train_x, k = k)
+  y_hat <- predict(fit, test_x, type = "class")
+  cm_test <- confusionMatrix(data = y_hat, reference = test_y, mode='everything')
+  f1 <- cm_test$overall["Accuracy"]
+  tibble(test = f1)
+})
+round(accuracy$test,3)
+ks[which.max(accuracy$test)]
+max(accuracy$test)
 
 
