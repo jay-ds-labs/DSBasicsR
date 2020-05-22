@@ -1000,3 +1000,469 @@ ks[which.max(accuracy$test)]
 max(accuracy$test)
 
 
+# Labs
+library(tidyverse)
+library(caret)
+set.seed(1996, sample.kind="Rounding") #if you are using R 3.6 or later
+n <- 1000
+p <- 10000
+x <- matrix(rnorm(n*p), n, p)
+colnames(x) <- paste("x", 1:ncol(x), sep = "_")
+y <- rbinom(n, 1, 0.5) %>% factor()
+
+x_subset <- x[ ,sample(p, 100)]
+fit <- train(x_subset, y, method = "glm")
+fit$results
+
+#install.packages("BiocManager")
+#BiocManager::install("genefilter")
+library(genefilter)
+tt <- colttests(x, y)
+names(tt)
+sum(tt$p.value<0.01)
+which(tt$p.value<0.01)
+
+x_subset <- x[ ,which(tt$p.value<0.01)]
+fit <- train(x_subset, y, method = "glm")
+fit$results
+
+fit <- train(x_subset, y, method = "knn", tuneGrid = data.frame(k = seq(101, 301, 25)))
+ggplot(fit)
+
+
+# Labs
+library(dslabs)
+data(tissue_gene_expression)
+names(tissue_gene_expression)
+x = tissue_gene_expression$x
+y = tissue_gene_expression$y
+fit <- train(x, y, method = "knn", tuneGrid = data.frame(k = seq(1,7,2)))
+fit
+
+
+# UNDERSTANDING THE KAPPA STATISTICS
+# It measures the degree of aggrement between classification predicted by model and 
+# actual classfication in categorical DV.
+# Kappa = 1 - Ratio of Observed Disagreement to Theoretical Disagreement
+# Kappa = 1 - [(1- Agreement_Observed) / (1- Agreement_Theoretical)]
+# Kappa = [Agreement_Observed - Agreement_Theoretical]/[1-Agreement_Theoretical]
+# You can calculate this from confusion matrix
+#             Actual
+# Predicted     0       1
+#     1         a       b
+#     0         c       d
+# Agreement_Observed = Accuracy = (a+d)/(a+b+c+d)
+# Agreement Theoretical = Prob that both said 1 + Prob that both said 0
+# Prob that both said 1 = Prob that predicted is 1 * Prob that Actual is 1
+# Prob that both said 1 = (a+b)/(a+b+c+d) * (b+d)/(a+b+c+d)
+# Prob that both said 0 = (c+d)/(a+b+c+d) * (a+c)/(a+b+c+d)
+# Interpretation - Closer to 1 means high agreement. Close to 0 means low. 
+# Negative means agreement worse than random or theoretical
+
+
+# UNDERSTANDING BOOTSTRAPPING
+
+# Let's say we wish to estimate the Median income of a population
+# To do this, lets first assume a population 
+# Then lets Use Monte Carlo Simulation from this population 
+# We will take out samples and then take out median income 
+
+n <- 10^6
+income <- 10^(rnorm(n, log10(45000), log10(3))) # creating an income population
+library(ggplot2)
+qplot(log10(income), bins = 30, color = I("black"))
+
+m <- median(income)
+m # we get median as 44941
+
+set.seed(1995, sample.kind="Rounding") 
+N <- 250
+X <- sample(income, N)
+M<- median(X)
+M # this is median of a sample of 250 people taken from the population
+
+library(gridExtra)
+B <- 10^4
+M <- replicate(B, {
+  X <- sample(income, N)
+  median(X)
+}) # here we perform monte carlo simuation of taking out median of 250 sample 
+# out of the population everytime
+p1 <- qplot(M, bins = 30, color = I("black"))
+p2 <- qplot(sample = scale(M)) + geom_abline()
+#install.packages('gridExtra')
+library(gridExtra)
+grid.arrange(p1, p2, ncol = 2)
+
+mean(M)
+# 45086  # we get similar median
+
+mean(M) + 1.96*sd(M)/sqrt(N)*c(-1,1)
+# 44602 45570
+quantile(M, c(0.025, 0.975))
+# 37939 53083
+# WE GET SIMILAR RESULTS BUT THE PROBLEM IS THAT WE DO NOT HAVE ACCESS TO POPULATION
+# IN REAL LIFE.
+
+# then we can use bootstrap when we do not have population
+# we can take samples of same size from the same dataset, by using replacement 
+# meaning even if we take samples again and again from the same dataset 
+# of same size we will end up getting statistics on the samples that will 
+# match the stats of the population
+
+X # lets consider X which is 250 random incomes that we have 
+# lets assume this is all we got. We do not have any population
+# Now lets perform bootstrap
+# we take out samples from X with the same size as X 10^4 times
+# Everytime we calculate median
+
+B <- 10^4
+M_star <- replicate(B, {
+  X_star <- sample(X, N, replace = TRUE)
+  median(X_star)
+}) # so M_star has 10^4 median incomes from the same X
+
+library(tidyverse)
+tibble(monte_carlo = sort(M), bootstrap = sort(M_star)) %>%
+  qplot(monte_carlo, bootstrap, data = .) + 
+  geom_abline() # comparing performance of monte carlo (when we have the population)
+# vs bootstrap when we do not have population and just 250 incomes.
+# we can see that they are quite a match
+
+quantile(M, c(0.05, 0.95))
+quantile(M_star, c(0.05, 0.95))
+
+median(X) + 1.96 * sd(X) / sqrt(N) * c(-1, 1)
+
+mean(M) + 1.96 * sd(M) * c(-1,1)
+
+mean(M_star) + 1.96 * sd(M_star) * c(-1, 1)
+
+# We can see that all stats from bootstrap match stats from population
+
+# Case study on Bootstrap
+# The createResample() function can be used to create bootstrap samples. 
+# For example, we can create the indexes for 10 bootstrap samples 
+# for the mnist_27 dataset like this:
+  
+library(dslabs)
+library(caret)
+data(mnist_27)
+set.seed(1995, sample.kind="Rounding")
+indexes <- createResample(mnist_27$train$y, 10) # provides indexes from the vector train$y
+names(indexes)
+head(indexes$Resample01)
+Resample01 = mnist_27$train$y[indexes$Resample01]
+head(Resample01)
+table(Resample01)
+
+t = which(indexes$Resample01 %in% c(3,4,7))
+indexes$Resample01[t]
+
+count3 = function(resample_index){
+  sum(resample_index==3)
+}
+
+sum(sapply(indexes,count3))
+
+# Lab
+B = 10000
+q75 = function(){
+  y = rnorm(100,0,1)
+  q = quantile(y,0.75)
+  return(q)
+}
+
+set.seed(1,sample.kind = 'Rounding')
+result = replicate(B,q75())
+mean(result)
+sd(result)
+
+set.seed(1,sample.kind = 'Rounding')
+y = rnorm(100,0,1)
+set.seed(1,sample.kind = 'Rounding')
+indexes <- createResample(y, 10000)
+q75 = function(resample_index){
+  return(quantile(y[resample_index],0.75))
+}
+
+result.bootstrap = sapply(indexes,q75)
+round(mean(result.bootstrap),3)
+round(sd(result.bootstrap),3)
+
+# UNDERSTANDING GENERATIVE MODELS - NAIVE BAYES THEOREM
+# Discriminative models - those models which considers only the distribution of 
+# Dependant variable for its prediction
+# Generative models - considers the distribution of both DV & IVs to predict DV
+# Considers how the data got generated
+# Bayes theorem, Linear Discriminant Analysis & Quadratic Discriminant analysis 
+# are moe examples of generative models
+
+# Bayes theorem says that -
+# p(Y=1|x) = [Fn(x|Y=1) * P(Y=1)] / [[Fn(x|Y=1) * P(Y=1)] + [Fn(x|Y=0) * P(Y=0)]]
+# p(Y=1|x) => probability of Y=1 for a given set of x 
+# Fn(x| Y=1) => A function that shows the distribution of x when Y = 1
+# distribution of x ,means a function which gives the prob of x to take any value
+# Fn(x| Y=0) => A function that shows the distribution of x when Y = 0
+# P(Y=1) => Prob of Y to be 1 or Prevelence of 1 in Y
+# P(Y=0) => Prob of Y to be 0 or Prevelence of 0 in Y
+
+
+# example of predictibng Sex (Y) with height (x)
+library(tidyverse)
+library(caret)
+library(dslabs)
+data("heights")
+
+y <- heights$height
+set.seed(1995, sample.kind = 'Rounding')
+test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+train_set <- heights %>% slice(-test_index)
+test_set <- heights %>% slice(test_index)
+
+params <- train_set %>% 
+  group_by(sex) %>% 
+  summarize(avg = mean(height), sd = sd(height))
+params
+
+pi <- train_set %>% summarize(pi=mean(sex=="Female")) %>% pull(pi)
+pi #prevelance of Y = 1
+x <- test_set$height
+
+f0 <- dnorm(x, params$avg[2], params$sd[2])  # distribution of x when Y =1
+# since height is normally distributed. We can use dnorm to find the 
+# prob of any given value of x i.e. height, considering height is normally
+# distributed with mean(height) ad sd(height)
+# so dnorm(x, mean, sd) is the function that generates the prob distribution of x
+# when Y = 1
+f0 # prob of height to take each value in the data set, if Y = 0, considering
+# that height is normally distributed with mean & sd of all males (Y=0)
+
+f1 <- dnorm(x, params$avg[1], params$sd[1])
+# functionthat generates prob distribution of x when Y=1 ie. females
+
+p_hat_bayes <- f1*pi / (f1*pi + f0*(1 - pi)) # predicted prob of Y =1
+
+# plotting predicted prob of Sex = Female i.e. Y=1 for diff values of height i.e. x
+tibble(prob=p_hat_bayes, x=x) %>% ggplot(aes(x,prob)) +geom_point()+geom_line()
+
+# We can see that the prob is like logistic regression
+
+# Bayes theorem is heaviliy dependant on the Prevelance p(Y=1)
+# As in our case Prevelance of Femnales is very low (0.214), hence the 
+# model is mostly going to predict male for given heights.
+# HEnce model sensitivity will be low while specificity will be high
+# Lets look at this 
+
+# Let's take the cut off prob to be 0.5 for predicting Female
+y_hat_bayes <- ifelse(p_hat_bayes > 0.5, "Female", "Male")
+sensitivity(data = factor(y_hat_bayes), reference = factor(test_set$sex))
+# very low 
+specificity(data = factor(y_hat_bayes), reference = factor(test_set$sex))
+# very high
+
+# HOWEVER THE BEUTY OF THIS MODEL THAT WE CAN CONTROL THE PREVELANCE
+# We can manualy set the prevelance to what we think it should be rather than 
+# going by the bias in the dataset
+# this also means that we do not change the cutoff to maximize accuracy 
+# like we do in Logistic regression
+
+p_hat_bayes_unbiased <- f1 * 0.5 / (f1 * 0.5 + f0 * (1 - 0.5)) 
+y_hat_bayes_unbiased <- ifelse(p_hat_bayes_unbiased> 0.5, "Female", "Male")
+
+# Now lets check for new sensitivity & specificity on test data
+sensitivity(factor(y_hat_bayes_unbiased), factor(test_set$sex))
+# this has shot up to high acceptable limits
+specificity(factor(y_hat_bayes_unbiased), factor(test_set$sex))
+# This is also high
+
+# plotting predicted prob of Sex = Female i.e. Y=1 for diff values of height i.e. x
+tibble(prob=p_hat_bayes_unbiased, x=x) %>% ggplot(aes(x,prob)) +geom_point()+geom_line()+
+  geom_hline(yintercept = 0.5, lty = 2) + 
+  geom_vline(xintercept = 67, lty = 2)
+# this also gives us a good cutoff of height arond 66-67 for gender
+
+# UNDERSTANIDNG QUADRATIC / LINEAR DISCRIMINANT ANALYSIS (QDA/LDA)
+# # qda IS  A VERSION OF NAIVE BAYES WHERE WE ASSUME THAT THE DISTRIBUTIONS
+# USED TO GET THE PROB p(Y=1|x) are multivariate normal
+# so for e.g. if we have 2 IV x1 & x2 then we will use 
+# f(x1,x2 | Y=1) & f(x1,x2 | Y=0)
+# This means that to define these distributions we will need -
+# mean(x1) , mean(x2), sd(x1), sd(x2) & correlation(x1,x2) when Y=1 and
+# mean(x1) , mean(x2), sd(x1), sd(x2) & correlation(x1,x2) when Y=0 
+# we will correlations between all possible pairs of IV
+# which means for 2 IV & 2 class of Y (0 & 1) we will need 2 correlation
+# But for 10 IVs, we will need K*N(N-1) correlations, where
+# K is count of classes of Y & N is number of IV
+# with higher number of IV, the number of parameters increase drastically, 
+# and the model becomes impractical due to overfitting
+
+# This is solved by considering LDA, where it is assumed that the 
+# correlation structure is same across all classes, meaning 
+# standard deviation is made same for all IVs, so
+# for 2 IV we will need only 2 sd & 1 correlation
+# However this means that the boundary between X1 & X2 to separate the Y classes
+# is linear as in logistic , rather than quadratic for QDA
+# Hence LDA doesnt allow us to capture the non linearity in the relationships
+
+# Lets look at theexample to understand in practice
+data("mnist_27")
+params <- mnist_27$train %>% 
+  group_by(y) %>% 
+  summarize(avg_1 = mean(x_1), avg_2 = mean(x_2), 
+            sd_1= sd(x_1), sd_2 = sd(x_2), 
+            r = cor(x_1, x_2))
+params # shows the number of parameters required for building a model with 2 IV
+
+# visually looking at the classification
+mnist_27$train %>% mutate(y = factor(y)) %>% 
+  ggplot(aes(x_1, x_2, color=y)) + 
+  geom_point(show.legend = FALSE) + 
+  stat_ellipse(type="norm", lwd = 1.5)
+
+library(caret)
+# running qda using train function in caret
+train_qda <- train(y ~ ., method = "qda", data = mnist_27$train) 
+y_hat <- predict(train_qda, mnist_27$test)
+confusionMatrix(y_hat, mnist_27$test$y)$overall["Accuracy"]
+# .82 accuracy
+names(train_qda)
+train_qda$method
+data(mnist_27)
+p1 = mnist_27$true_p%>% ggplot(aes(x_1, x_2, z = p, fill = p)) +
+  geom_raster() +
+  scale_fill_gradientn(colors=c("#F8766D", "white", "#00BFC4")) +
+  stat_contour(breaks=c(0.5), color="black") + ggtitle('True output')
+
+p_hat <- predict(train_qda, mnist_27$true_p, type = 'prob') 
+# type='prob' for class probabilities. Type='raw' for class predictions
+
+p2 = mnist_27$true_p%>% mutate(p_hat=p_hat[,2])  %>% ggplot(aes(x_1, x_2, z = p_hat, fill = p_hat)) +
+  geom_raster() +
+  scale_fill_gradientn(colors=c("#F8766D", "white", "#00BFC4")) +
+  stat_contour(breaks=c(0.5), color="black") + ggtitle('QDA')
+
+# One reason QDA does not work as well as the kernel methods is perhaps 
+# because the assumption of normality does not quite hold. 
+# Although for the 2s it seems reasonable, for the 7s it does seem to be off. 
+# Notice the slight curvature in the points for the 7s
+
+mnist_27$train %>% mutate(y = factor(y)) %>% 
+  ggplot(aes(x_1, x_2, fill = y, color=y)) + 
+  geom_point(show.legend = FALSE) + 
+  stat_ellipse(type="norm") +
+  facet_wrap(~y)
+
+
+# so now lets apply LDA
+train_lda <- train(y ~ ., method = "lda", data = mnist_27$train)
+y_hat <- predict(train_lda, mnist_27$test)
+confusionMatrix(y_hat, mnist_27$test$y)$overall["Accuracy"]
+
+# Lets see the raster plot on true conditional probabilities
+p_hat = predict(train_lda, mnist_27$true_p, type = 'prob')
+mnist_27$true_p %>% mutate(p_hat = p_hat[,1]) %>% ggplot(aes(x_1,x_2, z=p_hat, fill=p_hat)) +
+  geom_raster() + scale_fill_gradientn(colors=c("#F8766D", "white", "#00BFC4"))+
+  stat_contour(breaks=c(0.5), color="black") + ggtitle('LDA')
+# we can see that the classification is similar to logistic
+
+
+# CASE STUDY: MORE THAN THREE CLASSES
+library(tidyverse)
+library(caret)
+library(dslabs)
+if(!exists("mnist")) mnist <- read_mnist()
+set.seed(3456, sample.kind = 'Rounding')
+index_127 <- sample(which(mnist$train$labels %in% c(1,2,7)), 2000)
+y <- mnist$train$labels[index_127] 
+x <- mnist$train$images[index_127,]
+rm(mnist)
+index_train <- createDataPartition(y, p=0.8, list = FALSE)
+## get the quadrants
+row_column <- expand.grid(row=1:28, col=1:28) 
+upper_left_ind <- which(row_column$col <= 14 & row_column$row <= 14)
+lower_right_ind <- which(row_column$col > 14 & row_column$row > 14)
+## binarize the values. Above 200 is ink, below is no ink
+x <- x > 200 
+## proportion of pixels in lower right quadrant
+x <- cbind(rowSums(x[ ,upper_left_ind])/rowSums(x), 
+           rowSums(x[ ,lower_right_ind])/rowSums(x)) 
+##save data
+train_set <- data.frame(y = factor(y[index_train]),
+                        x_1 = x[index_train,1], x_2 = x[index_train,2])
+test_set <- data.frame(y = factor(y[-index_train]),
+                       x_1 = x[-index_train,1], x_2 = x[-index_train,2])
+
+# Visually looking at training data
+train_set %>% ggplot(aes(x_1, x_2, color=y)) + geom_point()
+train_qda <- train(y ~ ., method = "qda", data = train_set)
+predict(train_qda, test_set, type = "prob") %>% head()
+predict(train_qda, test_set) %>% head()
+cm = confusionMatrix(predict(train_qda, test_set), test_set$y)
+cm$table
+cm$overall
+cm$byClass
+sensitivity_1 = 111/(111+14+19) # out of all actual 1's how many we predcited
+# recall & sensitivity are same
+recall_1 = sensitivity_1
+precision_1 = 111/(111+17+7) # out of all 1's predcited how many are correct
+specificity_1 = (80+17+25+109)/(17+7+80+17+25+109) # out of all possible non 1's
+# how many did we predict correctly
+F1_1 = 2*precision_1*recall_1/(precision_1+recall_1)
+
+y_hat = predict(train_qda, test_set)
+
+
+train_lda <- train(y ~ ., method = "lda", data = train_set)
+confusionMatrix(predict(train_lda, test_set), test_set$y)$overall["Accuracy"]
+train_knn <- train(y ~ ., method = "knn", tuneGrid = data.frame(k = seq(15, 51, 2)),
+                   data = train_set)
+confusionMatrix(predict(train_knn, test_set), test_set$y)$overall["Accuracy"]
+
+# QDA GIVE ACCURACY - 75%, LDA GOES DOWN TO 63% . KNN ALSO GIVE 75%
+# LIMITATION of generative models here is due to the lack of fit of 
+# the normal assumption, in particular for class 1.
+train_set %>% mutate(y = factor(y)) %>% ggplot(aes(x_1, x_2, fill = y, color=y)) + geom_point(show.legend = FALSE) + stat_ellipse(type="norm")
+
+# Labs
+library(dslabs)
+library(caret)
+library(tidyverse)
+data("tissue_gene_expression")
+
+set.seed(1993, sample.kind="Rounding")
+ind <- which(tissue_gene_expression$y %in% c("cerebellum", "hippocampus"))
+y <- droplevels(tissue_gene_expression$y[ind])
+x <- tissue_gene_expression$x[ind, ]
+x <- x[, sample(ncol(x), 10)]
+train_set = as.data.frame(cbind(x,y))
+str(train_set)
+train_set$y = as.factor(train_set$y)
+str(train_set)
+train_lda <- train(y ~ ., method = "lda", preProcess = "center",data = train_set)
+names(train_lda)
+train_lda$results
+train_lda$finalModel
+names(train_lda$finalModel)
+train_lda$finalModel$means
+means = as.data.frame(t(train_lda$finalModel$means))
+means$var = row.names(means)
+colnames(means) = c("cerebellum", "hippocampus","var")
+means %>% ggplot(aes(cerebellum,hippocampus))+geom_point() + geom_abline()+geom_text(aes(label=var))
+
+library(dslabs)      
+library(caret)
+data("tissue_gene_expression")
+
+set.seed(1993, sample.kind="Rounding") 
+y <- tissue_gene_expression$y
+x <- tissue_gene_expression$x
+x <- x[, sample(ncol(x), 10)]
+train_set = as.data.frame(cbind(x,y))
+train_set$y = as.factor(train_set$y)
+train_lda <- train(y ~ ., method = "lda", preProcess = "center",data = train_set)
+train_lda$results
+
+
+
+
