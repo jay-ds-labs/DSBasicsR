@@ -797,6 +797,14 @@ image(as.matrix(d))
 # calculates the avg of Y (if Y is continous) or Proportion of diff levels of Y (if Y is categorical)
 # larger Ks give more smoother estimates and smaller gives more wiggly estimates
 
+# If you are using K and you have an even number of classes (e.g. 2) 
+# it is a good idea to choose a K value with an odd number to avoid a tie. 
+# And the inverse, use an even number for K when you have an odd number of classes.
+# lets say there are 2 classes in y - 0,1 and you use k = 2
+# then it is possible that for a particcular set of x, the distance is same
+# for both windows, then there is a tie.
+
+
 #logistic regression
 library(caret)
 View(mnist_27$train)
@@ -935,6 +943,53 @@ ks[which.max(accuracy$test)]
 max(accuracy$test)
 
 
+# When an algorithm includes a tuning parameter, train automatically uses cross validation to decide among a few default values. To find out what parameter or parameters are optimized, you can read the manual104 or study the output of:
+getModelInfo("knn")
+
+#We can also use a quick lookup like this:
+modelLookup("knn")
+
+#If we run it with default values:
+train_knn <- train(y ~ ., method = "knn", data = mnist_27$train)
+
+# you can quickly see the results of the cross validation using the ggplot function. The argument highlight highlights the max:
+ggplot(train_knn, highlight = TRUE)
+
+# By default, the cross validation is performed by taking 25 bootstrap samples comprised of 25% of the observations. For the kNN method, the default is to try  
+# k = 5,7,9. We change this using the tuneGrid parameter. The grid of values must be supplied by a data frame with the parameter names as specified in the modelLookup output.
+# Here, we present an example where we try out 30 values between 9 and 67. To do this with caret, we need to define a column named k, so we use this: data.frame(k = seq(9, 67, 2)).
+# Note that when running this code, we are fitting 30 versions of kNN to 25 bootstrapped samples. Since we are fitting  
+# 30 * 25 = 750 kNN models, running this code will take several seconds. We set the seed because cross validation is a random procedure and we want to make sure the result here is reproducible.
+set.seed(2008)
+train_knn <- train(y ~ ., method = "knn", 
+                   data = mnist_27$train,
+                   tuneGrid = data.frame(k = seq(9, 71, 2)))
+ggplot(train_knn, highlight = TRUE)
+
+# To access the parameter that maximized the accuracy, you can use this:
+train_knn$bestTune
+# and the best performing model like this:
+train_knn$finalModel
+
+# The function predict will use this best performing model. Here is the accuracy of the best model when applied to the test set, which we have not used at all yet because the cross validation was done on the training set:
+confusionMatrix(predict(train_knn, mnist_27$test, type = "raw"),
+                mnist_27$test$y)$overall["Accuracy"]
+
+# If we want to change how we perform cross validation, we can use the trainControl function. We can make the code above go a bit faster by using, for example, 10-fold cross validation. This means we have 10 samples using 10% of the observations each. We accomplish this using the following code:
+
+control <- trainControl(method = "cv", number = 10, p = .9)
+train_knn_cv <- train(y ~ ., method = "knn", 
+                      data = mnist_27$train,
+                      tuneGrid = data.frame(k = seq(9, 71, 2)),
+                      trControl = control)
+ggplot(train_knn_cv, highlight = TRUE)
+
+
+
+
+
+
+
 # Labs
 library(caret)
 library(dslabs)
@@ -998,6 +1053,12 @@ accuracy <- map_df(ks, function(k){
 round(accuracy$test,3)
 ks[which.max(accuracy$test)]
 max(accuracy$test)
+
+
+
+
+
+
 
 
 # Labs
@@ -1462,6 +1523,507 @@ train_set = as.data.frame(cbind(x,y))
 train_set$y = as.factor(train_set$y)
 train_lda <- train(y ~ ., method = "lda", preProcess = "center",data = train_set)
 train_lda$results
+
+# WE HAVE ALREADY SEEN HOW LDA & QDA ARE NOT SUITABLE IN HANDLING LARGER
+# NUMBER OF PREDICTORS. 
+# EVEN KNN IS UNSUITABLE THE REASON IS DUE TO THE CURSE OF DIMENSIONALITY
+# IN KNN WE WE CREATE SPAN OR WINDOW OF K-SIZE NEIGHBOURHOOD
+# NOW THIS K SIZE IS MEASURED USING DISTANCE CALCULATION, WHICH CONSIDERS
+# EACH PREDICTOR AS A DIMENSION, SO IF THERE ARE 2 PREDICTORS THAN DISTANCE IS 
+# BETWEEN X & Y DIMENSIONS, IF 3 PREDICTORS THAN X, Y & Z, AND SO ON.
+# IT ALSO MEANS IS THAT IF THERE IS ONE PREDICTOR THE NEIGHBOURHOOD CAN BE DEFINED
+# WITH A LINE SPAN, IF IT IS 2 PREDICTORS THAN A SQUARE PLANE, IF IT IS 3 
+# DIMENSIONS THAN A CUBOID AND SO ON. 
+# NOW LETS SAY WE WANT 10% DATA IN A SPAN FOR KNN THEN FOR 
+# 1 PREDICTOR - WE WILL NEED 10% DATA
+# 2 PREDICTORS - WE WILL NEED A SQUARE WITH EACH SIDE = SQRT(0.1), SO THAT WE CAN 
+# COVER 10% AREA IN A 2 DIMENSION PLANE
+# 3 PREDICTORS - WE WILL NEED A CUBE WITH EACH SIDE = CUBEROOT(O.1), SO THAT
+# WE CAN COVER 10% VOLUME IN 3 DIMENSION 
+# P PREDICTORS - WE WILL NEED A FIGURE WITH P-SIDES WHERE EACH SIDE 
+# IS EQUAL TO O.1^(1/P)
+# THIS NUMBER BY THE TIME WE HAVE 100 PREDICTORS REACHES 1
+# WHICH MEANS A SPAN OF 10% WITH 10O PREDICTORS WILL MEAN ENTIRE DATA
+# WE ALSO KNOW THAT AS THE SPAN INCREASES ACCURACY ON THE TEST GROUP WILL DROP
+# AS THE MODEL WILL NOT CAPTURE ALL VARIATIONS
+
+# HENCE WE NEED TECHNIQUES LIKE REGRESSION (CART) & 
+# TREE BASED MODELS (RANDOM FOREST) FOR LARGE NUMBER OF PREDICTORS
+
+# Lets undertstand this with an example
+library(tidyverse)
+library(dslabs)
+data("olive")
+names(olive)
+
+# we will try to predict the region using the fatty acid composition values as predictors.
+table(olive$region)
+# We remove the area column because we won’t use it as a predictor.
+olive <- select(olive, -area)
+
+# Let’s very quickly try to predict the region using kNN:
+library(caret)
+fit <- train(region ~ .,  method = "knn", 
+             tuneGrid = data.frame(k = seq(1, 15, 2)), 
+             data = olive)
+ggplot(fit)
+
+# We see that using just one neighbor, we can predict relatively well. However, a bit of data exploration reveals that we should be able to do even better. For example, if we look at the distribution of each predictor stratified by region we see that eicosenoic is only present in Southern Italy and that linoleic separates Northern Italy from Sardinia.
+
+olive %>% gather(fatty_acid, percentage, -region) %>%
+  ggplot(aes(region, percentage, fill = region)) +
+  geom_boxplot() +
+  facet_wrap(~fatty_acid, scales = "free", ncol = 4) +
+  theme(axis.text.x = element_blank(), legend.position="bottom")
+
+# This implies that we should be able to build an algorithm that predicts perfectly! We can see this clearly by plotting the values for eicosenoic and linoleic.
+olive %>% 
+  ggplot(aes(eicosenoic, linoleic, color = region)) + 
+  geom_point() +
+  geom_vline(xintercept = 0.065, lty = 2) + 
+  geom_segment(x = -0.2, y = 10.54, xend = 0.065, yend = 10.54, 
+               color = "black", lty = 2)
+
+# This in turn can be used to define an algorithm with perfect accuracy. Specifically, we define the following decision rule. If eicosenoic is larger than 0.065, predict Southern Italy. If not, then if linoleic is larger than  
+# 10.535, predict Sardinia, and if lower, predict Northern Italy. 
+
+# Regression and decision trees operate by predicting an outcome variable  Y
+# by partitioning the predictors.
+
+
+# UNDERSTANDING REGRESSION TREES
+# THEY ARE DECIOSN TREES. DATA IS SPLIT IN SUCH A WAY TO REDUCE THE RSS
+# THIS CAN GO ON TILL WE HAVE ONLY ONE ELEMENTIN EACH NODE, RESULTING IN 
+# OVERTRAINING
+# THERE ARE 3 STOPPING CRITERIAS OR THE MODEL PARAMETERS -
+# CP - COMPLEXITY PARAMETER - The RSS must improve by a factor of cp for the new partition to be added. 
+# MINSPLIT - MIN NUMBER OF ELEMENTS IN A NODE BEFORE IT CAN BE PARTITIONED
+# MINBUCKET - MIN NUMBER OF ELEMENTS IN A RESULTING NODE AFTER PARTITIONING
+
+data("polls_2008")
+qplot(day, margin, data = polls_2008)
+
+#install.packages('rpart')
+library(rpart)
+fit <- rpart(margin ~ ., data = polls_2008)
+
+plot(fit, margin = 0.1)
+text(fit, cex = 0.75)
+
+polls_2008 %>% 
+  mutate(y_hat = predict(fit)) %>% 
+  ggplot() +
+  geom_point(aes(day, margin)) +
+  geom_step(aes(day, y_hat), col="red") # avg values predicted, shown by red line
+
+
+fit <- rpart(margin ~ ., data = polls_2008, 
+             control = rpart.control(cp = 0, minsplit = 2)) # each node having 1 element
+polls_2008 %>% 
+  mutate(y_hat = predict(fit)) %>% 
+  ggplot() +
+  geom_point(aes(day, margin)) +
+  geom_step(aes(day, y_hat), col="red")
+
+# We can use cross validation to choose the right set of parameters
+# Here is an example of using cross validation to chose cp
+library(caret)
+train_rpart <- train(margin ~ ., 
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0, 0.05, len = 25)),
+                     data = polls_2008)
+ggplot(train_rpart)
+
+# To see the resulting tree, we access the finalModel and plot it:
+plot(train_rpart$finalModel, margin = 0.1)
+text(train_rpart$finalModel, cex = 0.75)
+
+# And because we only have one predictor, we can actually plot the predicted 
+# values over the data points
+polls_2008 %>% 
+mutate(y_hat = predict(train_rpart)) %>% 
+ggplot() +
+geom_point(aes(day, margin)) +
+geom_step(aes(day, y_hat), col="red")
+
+
+# Note that if we already have a tree and want to apply a higher cp value, we can use the prune function. We call this pruning a tree because we are snipping off partitions that do not meet a cp criterion. We previously created a tree that used a cp = 0 and saved it to fit. We can prune it like this:
+pruned_fit <- prune(fit, cp = 0.01)
+
+  
+# When used on Categorical DV, it is called Decision trees   
+# Partitions are created by minimizing Gini Index & Entropy
+# Gini - measures teh degree to which multiple outcomes are present in a partition
+# Gini = sum(Pc*(1-Pc)) - sum of product of prob of each class to be present & absent 
+# in best case Gini = 0
+# Entropy = -sum(Pc*Log(Pc)) done for all classes. Best case we can see will be 0
+# entropy needs to be minimized and so is Gini
+
+train_rpart <- train(y ~ .,
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0.0, 0.1, len = 25)),
+                     data = mnist_27$train)
+plot(train_rpart)
+
+# The accuracy achieved by this approach is better than what we got with regression, but is not as good as what we achieved with kernel methods
+
+y_hat <- predict(train_rpart, mnist_27$test)
+confusionMatrix(y_hat, mnist_27$test$y)$overall["Accuracy"]
+
+p_hat <- predict(train_rpart, mnist_27$true_p, type = 'prob')
+p_hat
+
+mnist_27$true_p %>% mutate(p_hat=p_hat[,2]) %>% ggplot(aes(x_1,x_2, z=p_hat, fill=p_hat)) +
+  geom_raster() + scale_fill_gradientn(colors=c("#F8766D", "white", "#00BFC4"))+
+  stat_contour(breaks=c(0.5), color="black") + ggtitle('Decision Trees')
+
+# Note that with decision trees, it is difficult to make the boundaries 
+# mooth since each partition creates a discontinuity.
+
+# Classification trees have certain advantages that make them very useful. 
+# They are highly interpretable, even more so than linear models. 
+# They are easy to visualize (if small enough). 
+# Finally, they can model human decision processes 
+# and don’t require use of dummy predictors for categorical variables. 
+# On the other hand, the approach via recursive partitioning 
+# can easily over-train and is therefore a bit harder to train than, 
+# for example, linear regression or kNN. 
+# Furthermore, in terms of accuracy, it is rarely the best performing method 
+# since it is not very flexible and is highly unstable to changes in 
+# training data. Random forests, explained next, improve on several of these shortcomings.
+
+
+# RANDOM FOREST
+# install.packages('randomForest')
+library(randomForest)
+fit <- randomForest(margin~., data = polls_2008) 
+plot(fit)
+# We can see that in this case, the accuracy improves as we add more trees until about 30 trees where accuracy stabilizes.
+
+#The resulting estimate for this random forest can be seen like this:
+polls_2008 %>%
+mutate(y_hat = predict(fit, newdata = polls_2008)) %>% 
+ggplot() +
+geom_point(aes(day, margin)) +
+geom_line(aes(day, y_hat), col="red")
+
+# Here is the random forest fit for our digits example based on two predictors:
+library(randomForest)
+train_rf <- randomForest(y ~ ., data=mnist_27$train)
+
+confusionMatrix(predict(train_rf, mnist_27$test),
+                mnist_27$test$y)$overall["Accuracy"]
+
+p_hat <- predict(train_rf, mnist_27$true_p, type = 'prob')
+head(p_hat)
+mnist_27$true_p %>% mutate(p_hat=p_hat[,2]) %>% ggplot(aes(x_1,x_2, z=p_hat, fill=p_hat)) +
+  geom_raster() + scale_fill_gradientn(colors=c("#F8766D", "white", "#00BFC4"))+
+  stat_contour(breaks=c(0.5), color="black") + ggtitle('Decision Trees')
+
+# Visualizing the estimate shows that, although we obtain high accuracy, it appears that there is room for improvement by making the estimate smoother. This could be achieved by changing the parameter that controls the minimum number of data points in the nodes of the tree. The larger this minimum, the smoother the final estimate will be. We can train the parameters of the random forest. Below, we use the caret package to optimize over the minimum node size. Because, this is not one of the parameters that the caret package optimizes by default we will write our own code:
+nodesize <- seq(1, 51, 10)
+acc <- sapply(nodesize, function(ns){
+  train(y ~ ., method = "rf", data = mnist_27$train,
+        tuneGrid = data.frame(mtry = 2),
+        nodesize = ns)$results$Accuracy
+})
+qplot(nodesize, acc)
+
+train_rf_2 <- randomForest(y ~ ., data=mnist_27$train,
+                           nodesize = nodesize[which.max(acc)])
+
+confusionMatrix(predict(train_rf_2, mnist_27$test),
+                mnist_27$test$y)$overall["Accuracy"]
+
+p_hat <- predict(train_rf_2, mnist_27$true_p, type = 'prob')
+mnist_27$true_p %>% mutate(p_hat=p_hat[,2]) %>% ggplot(aes(x_1,x_2, z=p_hat, fill=p_hat)) +
+  geom_raster() + scale_fill_gradientn(colors=c("#F8766D", "white", "#00BFC4"))+
+  stat_contour(breaks=c(0.5), color="black") + ggtitle('Decision Trees')
+
+
+# Lab
+library(rpart)
+n <- 1000
+sigma <- 0.25
+set.seed(1, sample.kind = "Rounding") 
+x <- rnorm(n, 0, 1)
+y <- 0.75 * x + rnorm(n, 0, sigma)
+dat <- data.frame(x = x, y = y)
+fit <- rpart(y ~ ., data = dat) 
+
+plot(fit, margin = 0.1)
+text(fit,cex = 0.75)
+
+library(randomForest)
+fit <- randomForest(y ~ x, data = dat)
+  dat %>% 
+  mutate(y_hat = predict(fit)) %>% 
+  ggplot() +
+  geom_point(aes(x, y)) +
+  geom_step(aes(x, y_hat), col = "red")
+
+plot(fit)
+
+fit <- randomForest(y ~ x, data = dat, nodesize = 50, maxnodes = 25)
+dat %>% 
+  mutate(y_hat = predict(fit)) %>% 
+  ggplot() +
+  geom_point(aes(x, y)) +
+  geom_step(aes(x, y_hat), col = "red")
+  
+
+# CARET PACKAGE
+# EXAMPLE OF USAGE ACROSS TWO DIFF TECHNIQUES USING SIMILAR APPROACH
+library(caret)
+train_glm <- train(y ~ ., method = "glm", data = mnist_27$train)
+y_hat_glm <- predict(train_glm, mnist_27$test, type = "raw")
+confusionMatrix(y_hat_glm, mnist_27$test$y)$overall[["Accuracy"]]
+
+train_knn <- train(y ~ ., method = "knn", data = mnist_27$train)
+y_hat_knn <- predict(train_knn, mnist_27$test, type = "raw")
+confusionMatrix(y_hat_knn, mnist_27$test$y)$overall[["Accuracy"]]
+
+getModelInfo("knn")
+modelLookup("knn")
+ggplot(train_knn, highlight = TRUE)
+
+#By default, the cross validation is performed by taking 25 bootstrap samples comprised of 25% of the observations. For the kNN method, the default is to try  
+# k=5,7,9. We change this using the tuneGrid parameter. The grid of values must be supplied by a data frame with the parameter names as specified in the modelLookup output.
+# Here, we present an example where we try out 30 values between 9 and 67. To do this with caret, we need to define a column named k, so we use this: data.frame(k = seq(9, 67, 2)).
+# Note that when running this code, we are fitting 30 versions of kNN to 25 bootstrapped samples. Since we are fitting  
+# 30×25=  750 kNN models, running this code will take several seconds. We set the seed because cross validation is a random procedure and we want to make sure the result here is reproducible.
+
+set.seed(2008)
+train_knn <- train(y ~ ., method = "knn", 
+                   data = mnist_27$train,
+                   tuneGrid = data.frame(k = seq(9, 71, 2)))
+ggplot(train_knn, highlight = TRUE)
+
+train_knn$bestTune
+train_knn$finalModel
+confusionMatrix(predict(train_knn, mnist_27$test, type = "raw"),
+                mnist_27$test$y)$overall["Accuracy"]
+
+
+# If we want to change how we perform cross validation, we can use the trainControl function. We can make the code above go a bit faster by using, for example, 10-fold cross validation. This means we have 10 samples using 10% of the observations each. We accomplish this using the following code:
+control <- trainControl(method = "cv", number = 10, p = .9)
+train_knn_cv <- train(y ~ ., method = "knn", 
+                      data = mnist_27$train,
+                      tuneGrid = data.frame(k = seq(9, 71, 2)),
+                      trControl = control)
+ggplot(train_knn_cv, highlight = TRUE)
+
+train_knn_cv$results
+
+p_hat <- predict(train_knn_cv, mnist_27$true_p, type = 'prob')
+mnist_27$true_p %>% mutate(p_hat=p_hat[,2]) %>% ggplot(aes(x_1,x_2, z=p_hat, fill=p_hat)) +
+  geom_raster() + scale_fill_gradientn(colors=c("#F8766D", "white", "#00BFC4"))+
+  stat_contour(breaks=c(0.5), color="black") + ggtitle('Decision Trees')
+# The best fitting kNN model approximates the true conditional probability
+# However, we do see that the boundary is somewhat wiggly. This is because kNN, like the basic bin smoother, does not use a kernel. To improve this we could try loess. By reading through the available models part of the manual105 we see that we can use the gamLoess method. In the manual106 we also see that we need to install the gam package if we have not done so already:
+
+install.packages("gam")
+modelLookup("gamLoess")
+# We will stick to a degree of 1. But to try out different values for the span, we still have to include a column in the table with the name degree so we can do this:
+grid <- expand.grid(span = seq(0.15, 0.65, len = 10), degree = 1)
+grid
+train_loess <- train(y ~ ., 
+                     method = "gamLoess", 
+                     tuneGrid=grid,
+                     data = mnist_27$train)
+ggplot(train_loess, highlight = TRUE)
+
+# We can see that the method performs similar to kNN:
+# and produces a smoother estimate of the conditional probability:
+
+confusionMatrix(data = predict(train_loess, mnist_27$test), 
+                reference = mnist_27$test$y)$overall["Accuracy"]
+p_hat <- predict(train_loess, mnist_27$true_p, type = 'prob')
+mnist_27$true_p %>% mutate(p_hat=p_hat[,2]) %>% ggplot(aes(x_1,x_2, z=p_hat, fill=p_hat)) +
+  geom_raster() + scale_fill_gradientn(colors=c("#F8766D", "white", "#00BFC4"))+
+  stat_contour(breaks=c(0.5), color="black") + ggtitle('Decision Trees')
+
+# Labs
+set.seed(1991, sample.kind = 'Rounding')
+data(tissue_gene_expression)
+names(tissue_gene_expression)
+
+class(tissue_gene_expression$x)
+dat = as.data.frame(cbind(tissue_gene_expression$x,tissue_gene_expression$y))
+View(dat)
+colnames(dat)[501] = 'y'
+dat$y = as.factor(dat$y)
+train_rpart = train(y ~. , method = 'rpart',data = dat, tuneGrid = data.frame(cp = 0))
+colnames(dat)
+
+fit <- rpart(y ~ ., data = dat, control = rpart.control(cp = 0,minsplit = 0)) 
+plot(fit, margin = 0.1)
+text(fit,cex = 0.75)
+
+train(y ~ ., method = "rf", data = mnist_27$train,
+      tuneGrid = data.frame(mtry = 2),
+      nodesize = ns)
+
+set.seed(1991, sample.kind = 'Rounding')
+train_rf = train(y ~. , method = 'rf',data = dat, tuneGrid = data.frame(mtry=seq(50, 200, 25)), nodesize = 1)
+ggplot(train_rf, highlight = TRUE)
+varImp(train_rf)
+
+# Titanic Labs
+#install.packages('titanic')
+library(titanic)    # loads titanic_train data frame
+library(caret)
+library(tidyverse)
+library(rpart)
+
+# 3 significant digits
+options(digits = 3)
+
+# clean the data - `titanic_train` is loaded with the titanic package
+titanic_clean <- titanic_train %>%
+  mutate(Survived = factor(Survived),
+         Embarked = factor(Embarked),
+         Age = ifelse(is.na(Age), median(Age, na.rm = TRUE), Age), # NA age to median age
+         FamilySize = SibSp + Parch + 1) %>%    # count family members
+  select(Survived,  Sex, Pclass, Age, Fare, SibSp, Parch, FamilySize, Embarked)
+
+head(titanic_clean)
+set.seed(42,sample.kind='Rounding')
+test_index = createDataPartition(titanic_clean$Survived,1,p=0.2, list = F)
+test_set=titanic_clean[test_index,]
+train_set=titanic_clean[-test_index,]
+str(train_set)
+mean(as.numeric(train_set$Survived))
+prop.table(table(train_set$Survived))
+
+set.seed(3, sample.kind='Rounding')
+survived_p = sample(c(0,1), replace=T, size = length(test_index))
+t = table(survived_p,test_set$Survived)
+sum(diag(t))/sum(t)
+t
+sum(t)
+
+
+
+set.seed(3)
+y_hat <- sample(c(0,1), length(test_index), replace = TRUE) %>% 
+  factor(levels = levels(test_set$Survived))
+
+# compute accuracy
+mean(y_hat == test_set$Survived)
+
+train_set %>% filter(Sex=='female') %>% pull(Survived) %>% table() %>% prop.table()
+train_set %>% filter(Sex=='male') %>% pull(Survived) %>% table() %>% prop.table()
+
+table(test_set$Survived, test_set$Sex)
+
+(51+96)/179
+prop.table(table(train_set$Pclass,train_set$Survived),1)
+
+table(test_set$Pclass,test_set$Survived)
+(32+25+69)/179
+
+prop.table(table(paste0(train_set$Sex,'_',train_set$Pclass),train_set$Survived),1)
+table(paste0(test_set$Sex,'_',test_set$Pclass),test_set$Survived)
+(25+13+13+16+24+56)/179
+
+test_set2 = test_set %>% mutate(p_sex = as.factor(ifelse(Sex=='female',1,0)), 
+                                p_class = as.factor(ifelse(Pclass == 1, 1,0)), 
+                                p_sex_class=as.factor(ifelse(Pclass<3 & Sex=='female',1,0)))
+
+confusionMatrix(test_set2$p_sex, test_set2$Survived, mode = "everything")
+confusionMatrix(test_set2$p_class, test_set2$Survived, mode = "everything")
+confusionMatrix(test_set2$p_sex_class, test_set2$Survived, mode = "everything")
+
+confusionMatrix()
+
+set.seed(1, sample.kind = 'Rounding')
+train_lda = train(Survived~Fare, data = train_set, method='lda')
+y_hat_lda = predict(train_lda,test_set)  
+confusionMatrix(y_hat_lda,test_set2$Survived, mode = "everything") 
+  
+set.seed(1, sample.kind = 'Rounding')
+train_qda = train(Survived~Fare, data = train_set, method='qda')
+y_hat_qda = predict(train_qda,test_set)  
+confusionMatrix(y_hat_qda,test_set2$Survived, mode = "everything") 
+
+set.seed(1, sample.kind = 'Rounding')
+train_glm = train(Survived~Age, data = train_set, method='glm')
+y_hat_glm = predict(train_glm,test_set)  
+confusionMatrix(y_hat_glm,test_set2$Survived, mode = "everything") 
+
+
+set.seed(1, sample.kind = 'Rounding')
+train_glm = train(Survived~Sex+Pclass+Fare+Age, data = train_set, method='glm')
+y_hat_glm = predict(train_glm,test_set)  
+confusionMatrix(y_hat_glm,test_set2$Survived, mode = "everything") 
+
+
+set.seed(1, sample.kind = 'Rounding')
+train_glm = train(Survived~., data = train_set, method='glm')
+y_hat_glm = predict(train_glm,test_set)  
+confusionMatrix(y_hat_glm,test_set2$Survived, mode = "everything") 
+
+set.seed(6, sample.kind = 'Rounding')
+train_knn = train(Survived~., data = train_set, method='knn', tuneGrid = data.frame(k = seq(3, 51, 2)))
+train_knn
+ggplot(train_knn,highlight=T)
+y_hat_knn = predict(train_knn,test_set)  
+confusionMatrix(y_hat_knn,test_set2$Survived, mode = "everything") 
+
+  
+control <- trainControl(method = "cv", number = 10, p = .9)
+set.seed(8, sample.kind = 'Rounding')
+train_knn_cv <- train(Survived ~ ., method = "knn", 
+                      data = train_set,
+                      tuneGrid = data.frame(k = seq(3, 51, 2)),
+                      trControl = control)
+ggplot(train_knn_cv, highlight = TRUE)
+y_hat_knn = predict(train_knn_cv,test_set)  
+confusionMatrix(y_hat_knn,test_set2$Survived, mode = "everything") 
+
+set.seed(10, sample.kind = 'Rounding')
+train_rpart <- train(Survived ~ .,
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0, 0.05, 0.002)),
+                     data = train_set)
+plot(train_rpart)
+ggplot(train_rpart, highlight = T)
+y_hat_rpart = predict(train_rpart,test_set)  
+confusionMatrix(y_hat_rpart,test_set2$Survived, mode = "everything") 
+plot(train_rpart$finalModel, margin = 0.1)
+text(train_rpart$finalModel, cex = 0.75)
+test_set_survived = test_set[y_hat_rpart==1,]
+min(test_set_survived$Age)
+View(titanic_clean)
+View(test_set)
+test_set_survived %>% filter(Sex=='male' & Age<=28)
+test_set_survived %>% filter(Sex=='female' & Pclass==3 )
+test_set2 = test_set %>% mutate(p = ifelse(Sex=='male' & Age>=3.5,0,(ifelse(Sex=='male' & Age<3.5,1,(ifelse(Sex=='female' & Pclass<2.5,1,(ifelse(Sex=='female' & Pclass>=2.5 & Fare>=23.35,0,1))))))))
+test_set2$p_match = test_set2$p_model==test_set2$p
+test_set2
+
+
+set.seed(14, sample.kind = 'Rounding')
+train_rf = train(Survived~., data = train_set, method='rf', 
+                  tuneGrid = data.frame(mtry = seq(1,7, 1)), ntree=100)
+train_rf
+ggplot(train_rf,highlight=T)
+y_hat_rf = predict(train_rf,test_set)  
+confusionMatrix(y_hat_rf,test_set2$Survived, mode = "everything") 
+varImp(train_rf)
+
+nodesize <- seq(1, 51, 10)
+acc <- sapply(nodesize, function(ns){
+  train(y ~ ., method = "rf", data = mnist_27$train,
+        tuneGrid = data.frame(mtry = 2),
+        nodesize = ns)$results$Accuracy
+})
+qplot(nodesize, acc)
+
+
+# UNDERSTANDING MACHINE LEARNING IN PRACTICE
+
 
 
 
