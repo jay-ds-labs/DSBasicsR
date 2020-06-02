@@ -17,7 +17,7 @@ options(scipen = 20)
 
 head(ratings)
 visualize_ratings(ratings_table = ratings)
-
+ratings <- edxS
 sparse_ratings <- sparseMatrix(i = ratings$user, j = ratings$item, x = ratings$rating,
                                dims = c(length(unique(ratings$user)), length(unique(ratings$item))),
                                dimnames = list(paste("u", 1:length(unique(ratings$user)), sep = ""),

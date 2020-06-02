@@ -131,7 +131,7 @@ rmse.results <- data.frame(SNo = integer(), ModelType = character(), Algorithm =
 
 ###################################################################################
 # PART 4 - Model Selection on 10K Movie Dataset
-# Type 1 - Random Prediction
+# Type 1 - Baseline Model
 # Model 1 - Random Rating with equal probability
 ###################################################################################
 
@@ -139,13 +139,13 @@ rmse.results <- data.frame(SNo = integer(), ModelType = character(), Algorithm =
 model.param.rating.prob <- rep(1/length(unique(edxS$rating)),10)
 predicted.rating <- sample(seq(0.5,5,0.5), size = nrow(validationS), replace = T, prob = model.param.rating.prob)
 model.rmse <- rmse(validationS$rating,predicted.rating)
-rmse.results[nrow(rmse.results)+1,] <- c(1, 'Random prediction', 'Random rating with 0.1 prob', model.rmse)
+rmse.results[nrow(rmse.results)+1,] <- c(1, 'Baseline model', 'Random rating with 0.1 prob', model.rmse)
 view.rmse()
 
 
 ###################################################################################
 # PART 4 - Model Selection on 10K Movie Dataset
-# Type 1 - Random Prediction
+# Type 1 - Baseline Model
 # Model 2 - Random Rating with existing probability in training dataset
 ###################################################################################
 
@@ -153,20 +153,20 @@ view.rmse()
 model.param.rating.prob <- edxS %>% group_by(rating) %>% summarise(perc = n()/nrow(edxS)) %>% pull(perc)
 predicted.rating <- sample(seq(0.5,5,0.5), size = nrow(validationS), replace = T, prob = model.param.rating.prob)
 model.rmse <- rmse(validationS$rating,predicted.rating)
-rmse.results[nrow(rmse.results)+1,] <- c(2, 'Random prediction', 'Random rating with existing prob', model.rmse)
+rmse.results[nrow(rmse.results)+1,] <- c(2, 'Baseline model', 'Random rating with existing prob', model.rmse)
 view.rmse()
 
 
 ###################################################################################
 # PART 4 - Model Selection on 10K Movie Dataset
-# Type 1 - Random Prediction
+# Type 1 - Baseline Model
 # Model 3 - Mean Rating
 ###################################################################################
 
 model.param.meanRating <- mean(edxS$rating)
 predicted.rating <- rep(model.param.meanRating,nrow(validationS))
 model.rmse <- rmse(validationS$rating,predicted.rating)
-rmse.results[nrow(rmse.results)+1,] <- c(3, 'Random prediction', 'Mean rating', model.rmse)
+rmse.results[nrow(rmse.results)+1,] <- c(3, 'Baseline model', 'Mean rating', model.rmse)
 view.rmse()
 
 
@@ -265,7 +265,7 @@ view.rmse()
 ###################################################################################
 # PART 4 - Model Selection on 10K Movie Dataset
 # Type 2 - Linear Models
-# Model 6 - Movie & User Effect with Regularization
+# Model 7 - Movie & User Effect with Regularization
 ###################################################################################
 
 # Choosing different lambda for movie & user
@@ -286,13 +286,13 @@ cat('Best model parameters \nMovie Lambda - ', lambdas[which.min(rmses),1],
 # Min RMSE:  0.8476
 
 model.rmse <- model.regularization(c(lambdas[which.min(rmses),1],lambdas[which.min(rmses),2]), edxS, validationS)
-rmse.results[nrow(rmse.results)+1,] <- c(6, 'Linear model', 'Movie, user & genre effect', model.rmse)
+rmse.results[nrow(rmse.results)+1,] <- c(6, 'Linear model', 'Movie & user effect with regularization', model.rmse)
 view.rmse()
 
 ###################################################################################
 # PART 4 - Model Selection on 10K Movie Dataset
 # Type 2 - Linear Models
-# Model 7 - Movie, User & Genre Effect with Regularization
+# Model 8 - Movie, User & Genre Effect with Regularization
 ###################################################################################
 
 # Choosing different lambda for movie & user
@@ -351,6 +351,79 @@ rmse.results[nrow(rmse.results)+1,] <- c(7, 'Linear model', 'Movie, user & genre
 view.rmse()
 
 
+###################################################################################
+# PART 4 - Model Selection on 10K Movie Dataset
+# Type 3 - Memory-Based Collaborative Filtering
+# Model 9 - User Based Collaborative Filtering
+###################################################################################
+
+# recommenderlab package will be used for this
+# Training dataset needs to be in realRatingMatrix format
+# At first training data is converted into sparse matrix & then sparse matrix
+# is converted into realRatingMatrix
+edxS.realRatingMatrix <- convert.df.to.realRatingMatrix(edxS)
+sparse_ratings[1:10, 1:10]
+
+real_ratings <- new("realRatingMatrix", data = sparse_ratings)
+real_ratings
+as(real_ratings,"matrix")[1:5,1:5]
+
+model <- Recommender(real_ratings, method = "POPULAR", param=list(normalize = "center"))
+prediction <- predict(model, real_ratings[1:5], type="ratings")
+as(prediction, "matrix")[,1:5]
+
+set.seed(1, sample.kind = 'Rounding')
+e <- evaluationScheme(real_ratings, method="split", train=0.8, given=-5)
+#5 ratings of 20% of users are excluded for testing
+
+model <- Recommender(getData(e, "train"), "POPULAR")
+prediction <- predict(model, getData(e, "known"), type="ratings")
+
+rmse_popular <- calcPredictionAccuracy(prediction, getData(e, "unknown"))[1]
+rmse_popular
+
+as(getData(e, "train"),"matrix")[1:5,1:5]
+as(getData(e, "known"),"matrix")[1:5,1:5]
+as(prediction,"matrix")[1:5,1:5]
+as(getData(e, "unknown"),"matrix")[1:5,1:5]
+
+model <- Recommender(real_ratings, method = "UBCF",
+                     param=list(normalize = "center", method="Cosine", nn=50))
+prediction <- predict(model, real_ratings[1:5], type="ratings")
+as(prediction, "matrix")[,1:5]
+
+set.seed(1)
+
+model <- Recommender(getData(e, "train"), method = "UBCF",
+                     param=list(normalize = "center", method="Cosine", nn=50))
+
+prediction <- predict(model, getData(e, "known"), type="ratings")
+
+rmse_ubcf <- calcPredictionAccuracy(prediction, getData(e, "unknown"))[1]
+rmse_ubcf
+
+
+model <- Recommender(real_ratings, method = "IBCF",
+                     param=list(normalize = "center", method="Cosine", k=350))
+prediction <- predict(model, real_ratings[1:5], type="ratings")
+as(prediction, "matrix")[,1:8]
+
+set.seed(1)
+
+model <- Recommender(getData(e, "train"), method = "IBCF",
+                     param=list(normalize = "center", method="Cosine", k=350))
+
+prediction <- predict(model, getData(e, "known"), type="ratings")
+
+rmse_ubcf <- calcPredictionAccuracy(prediction, getData(e, "unknown"))[1]
+rmse_ubcf
+
+
+
+
+
+
+
 # 6 Types of models to be built
 # Type 1 - Random Prediction
 #   Random Rating - Same prob 
@@ -360,6 +433,7 @@ view.rmse()
 #   Movie Effect
 #   Movie & User Effect
 #   Movie, User & Genre Effect
+#   Movie & User Effect with Regularization
 #   Movie, User & Genre Effect with Regularization
 # Type 3 - Memory-Based Collaborative Filtering
 #   User Based Collaborative Filtering

@@ -209,3 +209,73 @@ model.regularization.with.genre <- function(l,train,test){
   return(rmse(test$rating, predicted.rating))
 }
 
+
+###################################################################################
+# PART 4 - Model Selection on 10K Movie Dataset
+# Type 3 - Memory-Based Collaborative Filtering
+# Model 9 - User Based Collaborative Filtering
+###################################################################################
+
+convert.df.to.realRatingMatrix <- function(df){
+  sm <- sparseMatrix(i = df$userId, j = df$movieId, x = df$rating,
+                                 dims = c(length(unique(df$userId)), length(unique(df$movieId))),
+                                 dimnames = list(paste("u", 1:length(unique(df$userId)), sep = ""),
+                                                 paste("m", 1:length(unique(df$movieId)), sep = "")))
+  return(new("realRatingMatrix", data = sm))
+  
+}
+  
+df <- edxS[,1:3]  
+load('ratings.rda')
+str(ratings)  
+class(ratings)  
+class(edxS)  
+df <- as.data.table(edxS[,1:3])  
+class(df)  
+str(df)  
+edxS[, sapply(.SD, function(x) 
+  as.numeric(factor(x, levels=unique(x))))]
+  
+
+  
+sparse_ratings <- sparseMatrix(i = ratings$user, j = ratings$item, x = as.numeric(ratings$rating),
+                               dims = c(length(unique(ratings$user)), length(unique(ratings$item))),
+                               dimnames = list(paste("u", 1:length(unique(ratings$user)), sep = ""),
+                                               paste("m", 1:length(unique(ratings$item)), sep = "")))
+
+
+u <- ratings$user
+i <- ratings$item
+r <- as.numeric(ratings$rating)
+
+i <- edxS2$userId
+u <- edxS2$movieId
+r <- edxS2$rating
+
+i
+u
+r
+
+i <- as.numeric(factor(i, levels=unique(i)))
+u <- as.numeric(factor(u, levels=unique(u)))
+r <- as.numeric(factor(r, levels=unique(r)))
+
+i <- ratings$user
+u <- ratings$item
+r <- as.numeric(ratings$rating)
+
+u <- c(1,2,3,4,5,6,7,8,9,10)
+i <- c(1,1,1,1,1,1,1,1,1,1)
+r <- c(1,2,3,4,5,1,2,3,4,5)
+sparse_ratings <- sparseMatrix(i = u, j = i, x = r,
+                               dims = c(10,1),
+                               dimnames = list(paste("u", 1:length(unique(u)), sep = ""),
+                                               paste("m", 1:length(unique(i)), sep = ""))
+                               )
+
+sparse_ratings
+edxS2 <- edxS[1:10,1:3]
+
+i
+u
+r
