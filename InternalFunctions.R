@@ -117,3 +117,95 @@ view.rmse <- function(){
   pander(rmse.results, style='simple', split.table = 160)
 }
 
+
+
+###################################################################################
+# PART 4 - Model Selection on 10K Movie Dataset
+# Type 2 - Linear Models
+# Model 6 - Movie & User Effect with Regularization
+###################################################################################
+
+model.regularization <- function(l,train,test){
+  
+  user.effect <- edxS %>% left_join(movie.effect,by='movieId') %>% 
+    group_by(userId) %>% summarize(u_i = mean(rating - mean.rating- b_i))
+  
+  predicted.rating <- validationS %>% left_join(movie.effect,by='movieId') %>% 
+    left_join(user.effect,by='userId') %>% 
+    mutate(pred = mean.rating + b_i + u_i) %>% 
+    pull(pred) 
+  model.rmse <- rmse(validationS$rating,predicted.rating)
+  
+  mean.rating <- mean(train$rating) 
+  
+  movie.effect <- train %>% group_by(movieId) %>% summarize(b_i = sum(rating - mean.rating)/(n()+l[1]))
+  
+  user.effect <- train %>% left_join(movie.effect,by='movieId') %>% 
+    group_by(userId) %>% summarize(u_i = sum(rating - mean.rating- b_i)/(n()+l[2]))
+  temp <- train %>% left_join(movie.effect,by='movieId') %>% 
+    left_join(user.effect, by='userId')
+  
+  predicted.rating <- test %>% left_join(movie.effect,by='movieId') %>% 
+    left_join(user.effect,by='userId') %>%  
+    mutate(pred = mean.rating + b_i + u_i) %>% 
+    pull(pred)
+  
+  return(rmse(test$rating, predicted.rating))
+}
+
+
+###################################################################################
+# PART 4 - Model Selection on 10K Movie Dataset
+# Type 2 - Linear Models
+# Model 7 - Movie, User & Genre Effect with Regularization
+###################################################################################
+
+model.regularization.with.genre <- function(l,train,test){
+  
+  mean.rating <- mean(train$rating) 
+  
+  movie.effect <- train %>% group_by(movieId) %>% summarize(b_i = sum(rating - mean.rating)/(n()+l[1]))
+  
+  user.effect.Drama <- train %>% left_join(movie.effect,by='movieId') %>% 
+    group_by(userId,Drama) %>% summarize(u_i_Drama = sum(rating - mean.rating- b_i)/(n()+l[2]))
+  temp <- train %>% left_join(movie.effect,by='movieId') %>% 
+    left_join(user.effect.Drama,by=c('userId','Drama'))
+  
+  user.effect.Comedy <- temp %>% group_by(userId,Comedy) %>% 
+    summarize(u_i_Comedy = sum(rating - mean.rating- b_i-u_i_Drama)/(n()+l[2]))
+  temp <- temp %>% left_join(user.effect.Comedy,by=c('userId','Comedy'))
+  
+  user.effect.Action <- temp %>% group_by(userId,Action) %>% 
+    summarize(u_i_Action = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy)/(n()+l[2]))
+  temp <- temp %>% left_join(user.effect.Action,by=c('userId','Action'))
+  
+  user.effect.Thriller <- temp %>% group_by(userId,Thriller) %>% 
+    summarize(u_i_Thriller = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy-u_i_Action)/(n()+l[2]))
+  temp <- temp %>% left_join(user.effect.Thriller,by=c('userId','Thriller'))
+  
+  user.effect.Adventure <- temp %>% group_by(userId,Adventure) %>% 
+    summarize(u_i_Adventure = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy-u_i_Action-u_i_Thriller)/(n()+l[2]))
+  temp <- temp %>% left_join(user.effect.Adventure,by=c('userId','Adventure'))
+  
+  user.effect.Romance <- temp %>% group_by(userId,Romance) %>% 
+    summarize(u_i_Romance = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy-u_i_Action-u_i_Thriller-u_i_Adventure)/(n()+l[2]))
+  temp <- temp %>% left_join(user.effect.Romance,by=c('userId','Romance'))
+  
+  user.effect.OtherGenre <- temp %>% group_by(userId) %>% 
+    summarize(u_i_OtherGenre = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy-u_i_Action-u_i_Thriller-u_i_Adventure-u_i_Romance)/(n()+l[2]))
+  temp <- temp %>% left_join(user.effect.OtherGenre,by='userId')
+  
+  predicted.rating <- test %>% left_join(movie.effect,by='movieId') %>% 
+    left_join(user.effect.Drama,by=c('userId','Drama')) %>% 
+    left_join(user.effect.Comedy,by=c('userId','Comedy')) %>% 
+    left_join(user.effect.Action,by=c('userId','Action')) %>% 
+    left_join(user.effect.Thriller,by=c('userId','Thriller')) %>% 
+    left_join(user.effect.Adventure,by=c('userId','Adventure')) %>% 
+    left_join(user.effect.Romance,by=c('userId','Romance')) %>% 
+    left_join(user.effect.OtherGenre,by='userId') %>% 
+    mutate(pred = mean.rating + b_i + coalesce(u_i_Drama,0) + coalesce(u_i_Comedy,0) + coalesce(u_i_Action,0) + coalesce(u_i_Thriller,0) + coalesce(u_i_Adventure,0) + coalesce(u_i_Romance,0) + coalesce(u_i_OtherGenre,0)) %>% 
+    pull(pred)
+  
+  return(rmse(test$rating, predicted.rating))
+}
+

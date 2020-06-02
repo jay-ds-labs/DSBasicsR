@@ -265,6 +265,33 @@ view.rmse()
 ###################################################################################
 # PART 4 - Model Selection on 10K Movie Dataset
 # Type 2 - Linear Models
+# Model 6 - Movie & User Effect with Regularization
+###################################################################################
+
+# Choosing different lambda for movie & user
+lambdas_m <- seq(2, 10, 0.25)
+lambdas_u <- seq(2, 10, 0.25)
+lambdas <- expand.grid(lambdas_m, lambdas_u)
+
+# selecting best combination of lambdas. 
+# Using train.setS & test.setS to estimate the lambdas.
+# Note - this will take time to run.
+rmses <- apply(lambdas, 1, model.regularization, train=train.setS, test=test.setS)
+cat('Best model parameters \nMovie Lambda - ', lambdas[which.min(rmses),1],
+    '\nUser Lambda - ', lambdas[which.min(rmses),2], '\nMin RMSE: ', min(rmses))
+
+# Best model parameters 
+# Movie Lambda -  3 
+# User Lambda -  2 
+# Min RMSE:  0.8476
+
+model.rmse <- model.regularization(c(lambdas[which.min(rmses),1],lambdas[which.min(rmses),2]), edxS, validationS)
+rmse.results[nrow(rmse.results)+1,] <- c(6, 'Linear model', 'Movie, user & genre effect', model.rmse)
+view.rmse()
+
+###################################################################################
+# PART 4 - Model Selection on 10K Movie Dataset
+# Type 2 - Linear Models
 # Model 7 - Movie, User & Genre Effect with Regularization
 ###################################################################################
 
@@ -275,55 +302,54 @@ lambdas <- expand.grid(lambdas_m, lambdas_u)
 
 # selecting best combination of lambdas. 
 # Using train.setS & test.setS to estimate the lambdas.
-rmses <- apply(lambdas, 1, function(l){
-  
-  mean.rating <- mean(edxS$rating) 
+# Note - this will take time to run.
+rmses <- apply(lambdas, 1, model.regularization.with.genre, train=train.setS, test=test.setS)
+cat('Best model parameters \nMovie Lambda - ', lambdas[which.min(rmses),1],
+      '\nUser Lambda - ', lambdas[which.min(rmses),2], '\nMin RMSE: ', min(rmses))
 
-  movie.effect <- train.setS %>% group_by(movieId) %>% summarize(b_i = sum(rating - mean.rating)/(n()+l[1]))
-  
-  user.effect.Drama <- train.setS %>% left_join(movie.effect,by='movieId') %>% 
-    group_by(userId,Drama) %>% summarize(u_i_Drama = sum(rating - mean.rating- b_i)/(n()+l[2]))
-  edxS2 <- train.setS %>% left_join(movie.effect,by='movieId') %>% 
-    left_join(user.effect.Drama,by=c('userId','Drama'))
-  
-  user.effect.Comedy <- edxS2 %>% group_by(userId,Comedy) %>% 
-    summarize(u_i_Comedy = sum(rating - mean.rating- b_i-u_i_Drama)/(n()+l[2]))
-  edxS2 <- edxS2 %>% left_join(user.effect.Comedy,by=c('userId','Comedy'))
-  
-  user.effect.Action <- edxS2 %>% group_by(userId,Action) %>% 
-    summarize(u_i_Action = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy)/(n()+l[2]))
-  edxS2 <- edxS2 %>% left_join(user.effect.Action,by=c('userId','Action'))
-  
-  user.effect.Thriller <- edxS2 %>% group_by(userId,Thriller) %>% 
-    summarize(u_i_Thriller = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy-u_i_Action)/(n()+l[2]))
-  edxS2 <- edxS2 %>% left_join(user.effect.Thriller,by=c('userId','Thriller'))
-  
-  user.effect.Adventure <- edxS2 %>% group_by(userId,Adventure) %>% 
-    summarize(u_i_Adventure = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy-u_i_Action-u_i_Thriller)/(n()+l[2]))
-  edxS2 <- edxS2 %>% left_join(user.effect.Adventure,by=c('userId','Adventure'))
-  
-  user.effect.Romance <- edxS2 %>% group_by(userId,Romance) %>% 
-    summarize(u_i_Romance = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy-u_i_Action-u_i_Thriller-u_i_Adventure)/(n()+l[2]))
-  edxS2 <- edxS2 %>% left_join(user.effect.Romance,by=c('userId','Romance'))
-  
-  user.effect.OtherGenre <- edxS2 %>% group_by(userId) %>% 
-    summarize(u_i_OtherGenre = sum(rating - mean.rating- b_i-u_i_Drama-u_i_Comedy-u_i_Action-u_i_Thriller-u_i_Adventure-u_i_Romance)/(n()+l[2]))
-  edxS2 <- edxS2 %>% left_join(user.effect.OtherGenre,by='userId')
-  
-  predicted.rating <- test.setS %>% left_join(movie.effect,by='movieId') %>% 
-    left_join(user.effect.Drama,by=c('userId','Drama')) %>% 
-    left_join(user.effect.Comedy,by=c('userId','Comedy')) %>% 
-    left_join(user.effect.Action,by=c('userId','Action')) %>% 
-    left_join(user.effect.Thriller,by=c('userId','Thriller')) %>% 
-    left_join(user.effect.Adventure,by=c('userId','Adventure')) %>% 
-    left_join(user.effect.Romance,by=c('userId','Romance')) %>% 
-    left_join(user.effect.OtherGenre,by='userId') %>% 
-    mutate(pred = mean.rating + b_i + coalesce(u_i_Drama,0) + coalesce(u_i_Comedy,0) + coalesce(u_i_Action,0) + coalesce(u_i_Thriller,0) + coalesce(u_i_Adventure,0) + coalesce(u_i_Romance,0) + coalesce(u_i_OtherGenre,0)) %>% 
-    pull(pred)
-  
-  return(rmse(train.setS$rating, predicted_ratings))
-})
-lambdas[which.min(rmses),]
+# Best model parameters 
+# Movie Lambda -  3 
+# User Lambda -  10 
+# Min RMSE:  0.83289
+
+# Looks like there is further scope to improve RMSE, as user Lambda is at the boundary
+# Makes sense to increase the range of user lambda 10 onwards, while keeping movie lambda 
+# fixed at 3, to reduce the number of combinations
+lambdas_m <- lambdas[which.min(rmses),1]
+lambdas_u <- seq(10, 30, 0.25)
+lambdas <- expand.grid(lambdas_m, lambdas_u)
+rmses <- apply(lambdas, 1, model.regularization.with.genre, train=train.setS, test=test.setS)
+cat('Best model parameters \nMovie Lambda - ', lambdas[which.min(rmses),1],
+    '\nUser Lambda - ', lambdas[which.min(rmses),2], '\nMin RMSE: ', min(rmses))
+
+tibble(lambdas_u=lambdas_u, rmses=rmses) %>% ggplot(aes(x=lambdas_u, y=rmses)) +
+                                              geom_point()+ggtitle('Movie lambda fixed at 3')
+# Best model parameters 
+# Movie Lambda -  3 
+# User Lambda -  19.25 
+# Min RMSE:  0.83239
+
+# final check with user lambda now fixed at 19.5 and moview lambdas changing
+lambdas_m <- seq(2, 10, 0.25)
+lambdas_u <- lambdas[which.min(rmses),2]
+lambdas <- expand.grid(lambdas_m, lambdas_u)
+rmses <- apply(lambdas, 1, model.regularization.with.genre, train=train.setS, test=test.setS)
+cat('Best model parameters \nMovie Lambda - ', lambdas[which.min(rmses),1],
+    '\nUser Lambda - ', lambdas[which.min(rmses),2], '\nMin RMSE: ', min(rmses))
+
+tibble(lambdas_m=lambdas_m, rmses=rmses) %>% ggplot(aes(x=lambdas_m, y=rmses)) +
+  geom_point()+ggtitle('User lambda fixed at 19.25')
+
+# Best model parameters 
+# Movie Lambda -  3 
+# User Lambda -  19.25 
+# Min RMSE:  0.83239
+
+# Using these model parameters (movie & user lambda) on validation dataset
+model.rmse = model.regularization.with.genre(l = c(lambdas[which.min(rmses),1], lambdas[which.min(rmses),2]), train = edxS, test = validationS)
+rmse.results[nrow(rmse.results)+1,] <- c(7, 'Linear model', 'Movie, user & genre effect with regularization', model.rmse)
+view.rmse()
+
 
 # 6 Types of models to be built
 # Type 1 - Random Prediction
