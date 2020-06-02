@@ -69,6 +69,21 @@ data.audit <- function(ds){
 
 
 ###################################################################################
+# PART 1 - Data Import, Audit & Cleaning
+# 3. Data cleaning- Getting all the genres in separate columns
+###################################################################################
+
+genre.detect <- function(ds){
+  for(i in 1:nrow(genre.summary)){
+    ds[,ncol(ds)+1] <- str_detect(ds$genres,genre.summary$value[i])
+    names(ds)[ncol(ds)] <- genre.summary$value[i]
+  }
+  return(ds)
+}
+
+
+
+###################################################################################
 # PART 3 - Data Preparation for Model Building
 # 1. Creating train & test datasets from edx dataset for model parameter estimation
 #    so that Validation set is used only for final model validation      
